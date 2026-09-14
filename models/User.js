@@ -72,7 +72,8 @@ const userSchema = new mongoose.Schema({
     referrals: { type: Number, default: 0 },
     completed: { type: [String], default: [] }
   },
-
+  
+  lastGameDate: { type: String, default: null },
   // التحدي اليومي
   lastDailyChallenge: { type: String, default: null },
 

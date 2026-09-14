@@ -4,12 +4,17 @@ import mongoose from 'mongoose';
 const shopItemSchema = new mongoose.Schema({
   name: { type: String, required: true, unique: true },
   price: { type: Number, required: true, min: 1 },
-  quantity: { type: Number, default: -1 },  // -1 = لانهائي
+  quantity: { type: Number, default: -1 },
   description: { type: String, default: '' },
-  category: { type: String, enum: ['help', 'cosmetic', 'permanent'], default: 'help' },
-  effect: { type: String, default: null },  // fifty_fifty, skip, retry, extra_question, extra_time, discount, etc
-  value: { type: Number, default: 0 },      // قيمة التأثير
+  category: {
+    type: String,
+    enum: ['help', 'cosmetic', 'permanent', 'external', 'wheel'],
+    default: 'external'
+  },
+  effect: { type: String, default: null },
+  value: { type: Number, default: 0 },
   active: { type: Boolean, default: true },
+  wheelPrizes: { type: Array, default: null },
   createdAt: { type: Date, default: Date.now }
 });
 

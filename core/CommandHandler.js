@@ -1,6 +1,18 @@
 // core/CommandHandler.js
 import { today } from '../utils/helpers.js';
 
+// ✅ الأوامر المركبة (تقبل _ ومسافة)
+const COMPOUND_COMMANDS = [
+  'اضف_نقاط', 'خصم_نقاط', 'عدل_نقاط',
+  'فك_تجميد',
+  'عرض_لاعب', 'عرض_اللاعبين', 'عرض_المجمدين',
+  'عرض_الاكواد', 'عرض_المنتجات',
+  'اضف_منتج', 'حذف_منتج', 'عدل_منتج',
+  'اضف_كود', 'حذف_كود',
+  'اعطي_ادمن', 'ازل_ادمن',
+  'اضف_ريو', 'خصم_ريو'
+];
+
 export default class CommandHandler {
   constructor(systems) {
     this.userSystem = systems.userSystem;
@@ -10,7 +22,7 @@ export default class CommandHandler {
     this.shop = systems.shop;
     this.codes = systems.codes;
     this.referral = systems.referral;
-    this.achievements = systems.achievementSystem;  // ✅ إصلاح
+    this.achievements = systems.achievementSystem;
     this.missions = systems.missions;
     this.leaderboard = systems.leaderboard;
     this.admin = systems.adminSystem;
@@ -26,8 +38,8 @@ export default class CommandHandler {
     // ✅ التجميد
     if (user.isFrozen) {
       const allowed = ['نقاطي', 'ملفي', 'مساعدة', 'توب', 'معرفي'];
-      const cmd = text.split(/\s+/)[0];
-      if (!allowed.includes(cmd)) {
+      const firstWord = text.split(/\s+/)[0];
+      if (!allowed.includes(firstWord)) {
         if (this.userSystem.shouldNotifyFrozen(user)) {
           await this.userSystem.markFrozenNotified(user);
           return '❄️ حسابك مجمد. تواصل مع الإدارة.';
@@ -36,9 +48,19 @@ export default class CommandHandler {
       }
     }
 
+    // ✅ تحليل الأمر (دعم الأوامر المركبة)
     const parts = text.split(/\s+/);
-    const cmd = parts[0];
-    const args = parts.slice(1);
+    let cmd = parts[0];
+    let args = parts.slice(1);
+
+    // إذا أول كلمتين تشكلان أمراً مركباً
+    if (parts.length >= 2) {
+      const twoWord = parts.slice(0, 2).join('_');
+      if (COMPOUND_COMMANDS.includes(twoWord)) {
+        cmd = twoWord;
+        args = parts.slice(2);
+      }
+    }
 
     try {
       switch (cmd) {
@@ -225,95 +247,114 @@ export default class CommandHandler {
   // ===================================
   _welcome(user) {
     if (user.isAdmin) {
-      return `👑 مرحباً بك يا ملك\n\n🆔 ${user.userId}\n\n💡 اكتب "مساعدة" للأوامر\n👑 اكتب "مدير" لأوامر الأدمن`;
+      return `👑 مرحباً ملك
+
+🎮 معرفك: ${user.userId}
+💰 رصيدك: ${user.rio} ريو
+
+💡 مساعدة — كل الأوامر
+👑 مدير — أوامر الأدمن`;
     }
-    return `🏔️ مرحباً بك في مغارة ريو\n\n🆔 معرفك: ${user.userId}\n💰 رصيدك: ${user.rio} ريو\n\n💡 اكتب "مساعدة" للأوامر`;
+    return `🏔️ مغارة ريو
+
+أهلاً بك!
+
+🎮 معرفك: ${user.userId}
+💰 رصيدك: ${user.rio} ريو
+
+💡 مساعدة — كل الأوامر`;
   }
 
   _help(user) {
-    let msg = '📋 الأوامر المتاحة\n\n';
-    msg += '👤 أساسية:\n';
-    msg += '• معرفي — معرّفك\n';
-    msg += '• نقاطي — رصيدك\n';
-    msg += '• ملفي — كل التفاصيل\n';
-    msg += '• توب — أفضل 10\n\n';
+    let msg = '📋 الأوامر\n\n';
 
-    msg += '🎮 الألعاب:\n';
-    msg += '• العب — لعبة (مرة/يوم)\n';
-    msg += '• تحدي — تحدي اليوم\n';
-    msg += '• أ/ب/ج/د — إجابتك\n\n';
+    msg += '👤 الحساب\n';
+    msg += 'معرفي • نقاطي • ملفي • توب\n\n';
 
-    msg += '🎁 الفعاليات:\n';
-    msg += '• هدية — الهدية اليومية\n';
-    msg += '• كود [X] — استرداد\n';
-    msg += '• احالتي — كود الإحالة\n';
-    msg += '• صديق [X] — إحالة صديق\n\n';
+    msg += '🎮 اللعب\n';
+    msg += 'العب • تحدي\n\n';
 
-    msg += '🛒 السوق:\n';
-    msg += '• سوق — عرض المنتجات\n';
-    msg += '• اشتر [الاسم] — شراء\n';
-    msg += '• مشترياتي — سجل مشترياتك\n\n';
+    msg += '🎁 الفعاليات\n';
+    msg += 'هدية • كود • احالتي • صديق\n\n';
 
-    msg += '📋 إضافية:\n';
-    msg += '• مهام — المهام الأسبوعية\n';
+    msg += '🛒 السوق\n';
+    msg += 'سوق • اشتر • مشترياتي\n\n';
+
+    msg += '📋 المهام\n';
+    msg += 'مهام\n';
 
     if (user.isAdmin) {
-      msg += '\n👑 اكتب "مدير" لأوامر الأدمن';
+      msg += '\n👑 الإدارة\n';
+      msg += 'مدير';
     }
+
     return msg;
   }
 
   _adminHelp() {
     let msg = '👑 أوامر الأدمن\n\n';
-    msg += '💰 النقاط:\n';
-    msg += '• اضف_نقاط [ID] [الكمية]\n';
-    msg += '• خصم_نقاط [ID] [الكمية]\n';
-    msg += '• عدل_نقاط [ID] [الكمية]\n\n';
 
-    msg += '👥 اللاعبون:\n';
-    msg += '• تجميد [ID]\n';
-    msg += '• فك_تجميد [ID]\n';
-    msg += '• حذف [ID]\n';
-    msg += '• عرض_لاعب [ID]\n\n';
+    msg += '💰 النقاط\n';
+    msg += 'اضف_نقاط [ID] [الكمية]\n';
+    msg += 'خصم_نقاط [ID] [الكمية]\n';
+    msg += 'عدل_نقاط [ID] [الكمية]\n\n';
 
-    msg += '📋 القوائم:\n';
-    msg += '• عرض_اللاعبين [صفحة]\n';
-    msg += '• عرض_المجمدين\n';
-    msg += '• عرض_الاكواد\n';
-    msg += '• عرض_المنتجات\n';
-    msg += '• احصائيات\n\n';
+    msg += '👥 اللاعبون\n';
+    msg += 'تجميد [ID]\n';
+    msg += 'فك_تجميد [ID]\n';
+    msg += 'حذف [ID]\n';
+    msg += 'عرض_لاعب [ID]\n\n';
 
-    msg += '🛒 المنتجات:\n';
-    msg += '• اضف_منتج [الاسم] [السعر] [الكمية] [الوصف]\n';
-    msg += '• حذف_منتج [الاسم]\n';
-    msg += '• عدل_منتج [الاسم] [الحقل] [القيمة]\n\n';
+    msg += '📋 القوائم\n';
+    msg += 'عرض_اللاعبين [صفحة]\n';
+    msg += 'عرض_المجمدين\n';
+    msg += 'عرض_الاكواد\n';
+    msg += 'عرض_المنتجات\n';
+    msg += 'احصائيات\n\n';
 
-    msg += '🎫 الأكواد:\n';
-    msg += '• اضف_كود [الكود] [الريو] [العدد]\n';
-    msg += '• حذف_كود [الكود]\n\n';
+    msg += '🛒 المنتجات\n';
+    msg += 'اضف_منتج [الاسم] [السعر] [الكمية] [الوصف]\n';
+    msg += 'حذف_منتج [الاسم]\n';
+    msg += 'عدل_منتج [الاسم] [الحقل] [القيمة]\n\n';
 
-    msg += '👑 الأدمن:\n';
-    msg += '• اعطي_ادمن [ID]\n';
-    msg += '• ازل_ادمن [ID]\n\n';
+    msg += '🎫 الأكواد\n';
+    msg += 'اضف_كود [الكود] [الريو] [العدد]\n';
+    msg += 'حذف_كود [الكود]\n\n';
 
-    msg += '📩 التواصل:\n';
-    msg += '• رسالة [ID] [النص]\n';
+    msg += '👑 الأدمن\n';
+    msg += 'اعطي_ادمن [ID]\n';
+    msg += 'ازل_ادمن [ID]\n\n';
+
+    msg += '📩 التواصل\n';
+    msg += 'رسالة [ID] [النص]\n\n';
+
+    msg += '💡 الأوامر تقبل _ أو مسافة';
 
     return msg;
   }
 
   _myId(user) {
-    return `🆔 معلوماتك\n\n🎮 معرف اللعبة: ${user.userId}\n📱 معرف المنصة: ${user.platformId}\n🌐 المنصة: ${user.platform}\n${user.isAdmin ? '👑 أدمن: نعم' : ''}`;
+    return `🆔 معلوماتك
+
+🎮 معرف اللعبة: ${user.userId}
+📱 معرف المنصة: ${user.platformId}
+🌐 المنصة: ${user.platform}${user.isAdmin ? '\n👑 أدمن: نعم' : ''}`;
   }
 
   _balance(user) {
-    return `💰 رصيدك\n\n🆔 ${user.userId}\n💎 ${user.rio} ريو\n⭐ المستوى: ${user.level}\n📊 إجمالي: ${user.totalEarned}\n🔥 Streak: ${user.streak}`;
+    return `💰 رصيدك
+
+◀️ معرفك: ${user.userId}
+💎 رصيدك: ${user.rio} ريو
+⭐ مستواك: ${user.level}
+🔥 أيام متتالية: ${user.streak}`;
   }
 
   _profile(user) {
     const bonus = this.points.getBonus(user);
-    let msg = `👤 ملفك\n\n`;
-    msg += `🆔 ${user.userId}\n`;
+    let msg = `👤 ملفي\n\n`;
+
+    msg += `🎮 المعرف: ${user.userId}\n`;
     msg += `💰 الرصيد: ${user.rio} ريو\n`;
     msg += `📊 الإجمالي: ${user.totalEarned}\n`;
     msg += `⭐ المستوى: ${user.level}`;
@@ -324,13 +365,13 @@ export default class CommandHandler {
     msg += `🏆 انتصارات: ${user.gamesWon}\n`;
     msg += `👥 إحالات: ${user.referralCount}\n\n`;
 
-    msg += `🎖️ الشارات:\n`;
+    msg += `🎖️ الشارات\n`;
     msg += this.achievements.listForUser(user);
 
     if (bonus.time > 0 || bonus.discount > 0) {
-      msg += '\n\n💎 ميزات المستوى:\n';
-      if (bonus.time > 0) msg += `• +${bonus.time} ثانية\n`;
-      if (bonus.discount > 0) msg += `• خصم ${bonus.discount}%\n`;
+      msg += '\n\n💎 مزايا المستوى\n';
+      if (bonus.time > 0) msg += `⏱️ +${bonus.time} ثانية\n`;
+      if (bonus.discount > 0) msg += `💸 خصم ${bonus.discount}%`;
     }
 
     return msg;
@@ -345,7 +386,9 @@ export default class CommandHandler {
     await this.missions.track(user, 'gifts');
     const completed = await this.missions.check(user);
     let msg = result.message;
-    if (completed.length > 0) msg += `\n\n🎉 مهمة مكتملة: ${completed[0].name} (+${completed[0].reward} ريو)`;
+    if (completed.length > 0) {
+      msg += `\n\n🎉 مهمة مكتملة: ${completed[0].name} (+${completed[0].reward} ريو)`;
+    }
     return msg;
   }
 
@@ -353,14 +396,12 @@ export default class CommandHandler {
   // الألعاب
   // ===================================
   async _handlePlay(user) {
-    // ✅ فحص لعبة نشطة
     const active = await this.game.getActiveGame(user.userId);
     if (active) return '🎮 لديك لعبة نشطة. أجب على السؤال الحالي.';
 
-    // ✅ فحص الحد اليومي
     const todayStr = today();
     if (user.lastGameDate === todayStr) {
-      return '🎮 لعبت اليوم. عد غدًا!\n\n💡 استخدم "تحدي" للسؤال اليومي';
+      return '🎮 لعبت اليوم. عد غدًا!\n\n💡 جرب "تحدي" للسؤال اليومي';
     }
 
     user.lastGameDate = todayStr;
@@ -387,13 +428,9 @@ export default class CommandHandler {
   async _handleGameAnswer(user, answer) {
     const result = await this.game.handleAnswer(user, answer);
 
-    // ✅ صمت
     if (result.silent) return null;
-
-    // ✅ خطأ
     if (result.error) return result.error;
 
-    // ✅ نجاح — معالجة إضافية
     try {
       if (user.gamesPlayed === 1 && user.referredBy) {
         await this.referral.completeReferral(user);
@@ -404,8 +441,6 @@ export default class CommandHandler {
         await this.missions.track(user, 'gamesWon');
       }
       await this.missions.check(user);
-
-      // شارات الرصيد
       await this.achievements.checkRioAchievements(user);
     } catch (e) {
       console.error('⚠️ خطأ في المعالجة الإضافية:', e.message);
@@ -414,9 +449,6 @@ export default class CommandHandler {
     return result.message;
   }
 
-  // ===================================
-  // المساعدات
-  // ===================================
   async _handleFifty(user) {
     const active = await this.game.getActiveGame(user.userId);
     if (!active) return null;
@@ -455,7 +487,8 @@ export default class CommandHandler {
   // ===================================
   async _handleBuy(user, args) {
     if (!args[0]) return null;
-    const result = await this.shop.purchase(user, args.join(' '));
+    const productName = args.join(' ');
+    const result = await this.shop.purchase(user, productName);
     if (result.error) return result.error;
 
     await this.missions.track(user, 'purchases');
@@ -468,7 +501,7 @@ export default class CommandHandler {
   _purchases(user) {
     if (!user.purchases || user.purchases.length === 0) return '📦 لا توجد مشتريات';
 
-    let msg = '📦 مشترياتك:\n\n';
+    let msg = '📦 مشترياتك\n\n';
     user.purchases.slice(-10).forEach(p => {
       msg += `• ${p.item} — ${p.price} ريو\n`;
     });
@@ -485,4 +518,4 @@ export default class CommandHandler {
     const result = await this.shop.addItem(name, price, quantity, description);
     return result.message || result.error;
   }
-    }
+  }

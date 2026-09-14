@@ -1,6 +1,13 @@
 // core/GeminiClient.js
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
+// ✅ قائمة الموديلات المتاحة (بالترتيب)
+const MODELS = [
+  'gemini-2.0-flash',
+  'gemini-2.5-flash',
+  'gemini-1.5-flash'
+];
+
 export default class GeminiClient {
   constructor() {
     const key = process.env.GEMINI_API_KEY;
@@ -9,16 +16,49 @@ export default class GeminiClient {
       this.enabled = false;
       return;
     }
+
     this.genAI = new GoogleGenerativeAI(key);
-    // ✅ موديل صحيح
-    this.model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
+    this.model = null;
     this.enabled = true;
     this.lastFailure = 0;
     this.cooldownMs = 5 * 60 * 1000;
+    this.currentModelIndex = 0;
+
+    // استخدام أول موديل افتراضيًا
+    this._useModel(0);
+
+    // ✅ فحص الموديلات المتاحة (async)
+    this._detectModel().catch(() => {});
   }
 
-  async generateQuestion(level = 'easy', excludeTexts = []) {
-    if (!this.enabled) return null;
+  _useModel(index) {
+    try {
+      this.model = this.genAI.getGenerativeModel({ model: MODELS[index] });
+      this.currentModelIndex = index;
+      console.log(`✅ Gemini: ${MODELS[index]}`);
+    } catch (e) {
+      console.error('❌ Gemini model error:', e.message);
+    }
+  }
+
+  async _detectModel() {
+    // نجرب الموديلات بالترتيب
+    for (let i = 0; i < MODELS.length; i++) {
+      try {
+        const testModel = this.genAI.getGenerativeModel({ model: MODELS[i] });
+        await testModel.generateContent('قل: نعم');
+        this._useModel(i);
+        return;
+      } catch (e) {
+        // ننتقل للموديل التالي
+      }
+    }
+    console.warn('⚠️ لم ينجح أي موديل Gemini — سيتم استخدام البنك فقط');
+    this.enabled = false;
+  }
+
+  async generateQuestion(level = 'easy') {
+    if (!this.enabled || !this.model) return null;
     if (Date.now() - this.lastFailure < this.cooldownMs) return null;
 
     const prompt = `أنشئ سؤال اختيار من متعدد باللغة العربية الفصحى.
@@ -36,8 +76,7 @@ Answer: [A/B/C/D]
 القواعد:
 - الإجابة الصحيحة واحدة فقط
 - الأسئلة واقعية ومثبتة
-- لا تكرار
-${excludeTexts.length > 0 ? `- تجنب المواضيع المشابهة لـ: ${excludeTexts.slice(0, 5).join(' | ')}` : ''}`;
+- لا تكرار`;
 
     try {
       const result = await this.model.generateContent(prompt);
@@ -46,6 +85,12 @@ ${excludeTexts.length > 0 ? `- تجنب المواضيع المشابهة لـ: 
     } catch (error) {
       console.error('❌ Gemini فشل:', error.message);
       this.lastFailure = Date.now();
+
+      // ✅ نجرب موديل آخر
+      const nextIndex = (this.currentModelIndex + 1) % MODELS.length;
+      if (nextIndex !== this.currentModelIndex) {
+        this._useModel(nextIndex);
+      }
       return null;
     }
   }

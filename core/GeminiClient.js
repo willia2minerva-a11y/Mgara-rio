@@ -10,10 +10,11 @@ export default class GeminiClient {
       return;
     }
     this.genAI = new GoogleGenerativeAI(key);
-    this.model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    // ✅ موديل صحيح
+    this.model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
     this.enabled = true;
     this.lastFailure = 0;
-    this.cooldownMs = 5 * 60 * 1000; // 5 دقائق تعطيل بعد الفشل
+    this.cooldownMs = 5 * 60 * 1000;
   }
 
   async generateQuestion(level = 'easy', excludeTexts = []) {

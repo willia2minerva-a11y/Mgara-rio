@@ -1,0 +1,32 @@
+# MongoDB
+MONGODB_URI=mongodb+srv://USER:PASS@cluster.mongodb.net/mgara-rio-v2
+
+# Facebook
+PAGE_ACCESS_TOKEN=EAAG...
+VERIFY_TOKEN=mgara_rio_verify_2026
+
+# Telegram
+TELEGRAM_BOT_TOKEN=1234567890:ABC...
+
+# Gemini
+GEMINI_API_KEY=AIzaSy...
+
+# Admin (اختياري)
+# إذا حددت ID هنا، صاحبه يحصل على M000R
+# إذا تركته فارغًا، أول لاعب يتواصل = M000R
+ADMIN_PLATFORM_ID=
+
+# رابط التواصل بعد الشراء
+ADMIN_CONTACT_LINK=https://facebook.com/your-profile
+
+# Server
+PORT=3000
+NODE_ENV=production
+RESET_SECRET=mgara-reset-2026
+
+# Gateway
+GATEWAY_MIN_INTERVAL_MS=5000
+GATEWAY_MAX_INTERVAL_MS=15000
+GATEWAY_SPAM_INTERVAL_MS=16000
+GATEWAY_MAX_PER_HOUR=300
+GATEWAY_MAX_PER_DAY=6000

@@ -1,13 +1,9 @@
 // index.js
 // 🏔️ مغارة ريو V2
-import { DataLoader } from './systems/data/DataLoader.js';
 import mongoose from 'mongoose';
 import 'dotenv/config';
 import express from 'express';
 import axios from 'axios';
-import FormData from 'form-data';
-import fs from 'fs';
-import path from 'path';
 
 import MessageGateway from './core/MessageGateway.js';
 import GeminiClient from './core/GeminiClient.js';
@@ -40,7 +36,6 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-let systems = null;
 let commandHandler = null;
 let telegramBot = null;
 
@@ -76,8 +71,10 @@ async function connectDB() {
       const indexes = await mongoose.connection.db.collection('users').indexes();
       for (const idx of indexes) {
         if (idx.name === 'userId_1' || idx.name === 'username_1') {
-          await mongoose.connection.db.collection('users').dropIndex(idx.name);
-          console.log(`✅ تم حذف الفهرس القديم: ${idx.name}`);
+          try {
+            await mongoose.connection.db.collection('users').dropIndex(idx.name);
+            console.log(`✅ تم حذف الفهرس القديم: ${idx.name}`);
+          } catch (e) {}
         }
       }
     }
@@ -101,7 +98,7 @@ function initSystems() {
   const leaderboard = new LeaderboardSystem();
   const adminSystem = new AdminSystem({ userSystem, pointsSystem, shopSystem: shop, codeSystem: codes });
 
-  systems = {
+  const systems = {
     userSystem,
     pointsSystem,
     achievementSystem,
@@ -119,6 +116,8 @@ function initSystems() {
   commandHandler = new CommandHandler(systems);
 
   shop.initialize().catch(e => console.error('Shop init error:', e.message));
+
+  console.log('✅ كل الأنظمة جاهزة');
 }
 
 // ===================================
@@ -220,7 +219,10 @@ app.get('/admin/reset/:secret', async (req, res) => {
 // ===================================
 async function setupTelegram() {
   const token = process.env.TELEGRAM_BOT_TOKEN;
-  if (!token) return;
+  if (!token) {
+    console.log('ℹ️ لا يوجد TELEGRAM_BOT_TOKEN — تخطي');
+    return;
+  }
 
   try {
     const TelegramBot = (await import('node-telegram-bot-api')).default;

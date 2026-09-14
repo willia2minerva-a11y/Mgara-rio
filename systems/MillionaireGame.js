@@ -15,7 +15,6 @@ export default class MillionaireGame {
   }
 
   async start(user, difficulty = 'easy') {
-    // حذف أي لعبة قديمة
     await ActiveGame.deleteOne({ userId: user.userId });
 
     const question = await this._getQuestion(difficulty);
@@ -33,16 +32,14 @@ export default class MillionaireGame {
     });
 
     await game.save();
-
     return this._formatQuestion(game, user);
   }
 
   async _getQuestion(difficulty) {
-    // ✅ المسار الأساسي: بنك الأسئلة
     const pool = FALLBACK_QUESTIONS.filter(q => q.d === difficulty);
     const fallbackPool = pool.length > 0 ? pool : FALLBACK_QUESTIONS;
 
-    // ✅ مسار Gemini (فقط أحيانًا — 20%)
+    // ✅ Gemini فقط بـ 20% (Fallback)
     if (this.gemini && this.gemini.enabled && Math.random() < 0.2) {
       const aiQ = await this.gemini.generateQuestion(difficulty);
       if (aiQ) {
@@ -64,7 +61,7 @@ export default class MillionaireGame {
     options.forEach((opt, i) => {
       msg += `${labels[i]}) ${opt}\n`;
     });
-    msg += `\n⏰ لديك ${totalTime} ثانية للإجابة\n`;
+    msg += `\n⏰ لديك ${totalTime} ثانية\n`;
     msg += `💰 النقاط: ${POINTS_PER_QUESTION[game.questionIndex - 1]}\n`;
     msg += `\n💡 اكتب: أ / ب / ج / د`;
 
@@ -73,7 +70,9 @@ export default class MillionaireGame {
 
   async handleAnswer(user, answer) {
     const game = await ActiveGame.findOne({ userId: user.userId });
-    if (!game) return { error: '❌ لا توجد لعبة نشطة. اكتب "العب"' };
+    if (!game) {
+      return { error: '❌ لا توجد لعبة نشطة. اكتب "العب"' };
+    }
 
     const { sentAt } = game.currentQuestion;
     const bonusTime = user.permanentPerks?.extraTime || 0;
@@ -83,12 +82,11 @@ export default class MillionaireGame {
     // ⏰ تجاوز الوقت → صمت
     if (elapsed > totalTime) {
       await ActiveGame.deleteOne({ userId: user.userId });
-      return { error: null }; // صمت
+      return { silent: true };
     }
 
-    // تحويل الإجابة
     const answerIndex = this._parseAnswer(answer);
-    if (answerIndex === -1) return { error: null }; // صمت
+    if (answerIndex === -1) return { silent: true };
 
     const correct = answerIndex === game.currentQuestion.correctIndex;
 
@@ -98,12 +96,11 @@ export default class MillionaireGame {
       user.gamesPlayed += 1;
       await user.save();
       return {
-        success: true,
-        message: `❌ إجابة خاطئة!\n\n🎮 انتهت اللعبة\n💰 النقاط المتراكمة: ${score} ريو\n\n💡 اكتب "العب" لجولة جديدة`
+        message: `❌ إجابة خاطئة!\n\n🎮 انتهت اللعبة\n💰 النقاط المتراكمة: ${score} ريو\n\n💡 اكتب "العب" غدًا لجولة جديدة`
       };
     }
 
-    // ✅ إجابة صحيحة
+    // ✅ صحيح
     const earned = POINTS_PER_QUESTION[game.questionIndex - 1];
     game.score += earned;
     user.totalQuestions += 1;
@@ -118,7 +115,6 @@ export default class MillionaireGame {
       await ActiveGame.deleteOne({ userId: user.userId });
 
       return {
-        success: true,
         message: `🎉 مبروك! أكملت 5/5\n\n💰 المكسب: +${game.score} ريو\n💎 رصيدك: ${user.rio} ريو\n\n🔥 أداء رائع!`
       };
     }
@@ -136,11 +132,11 @@ export default class MillionaireGame {
 
     let msg = `✅ صحيح! +${earned}\n\n`;
     msg += this._formatQuestion(game, user);
-    return { success: true, message: msg };
+    return { message: msg };
   }
 
   _parseAnswer(input) {
-    const clean = input.trim().toLowerCase();
+    const clean = String(input).trim().toLowerCase();
     const map = {
       'أ': 0, 'ا': 0, 'a': 0, '1': 0,
       'ب': 1, 'b': 1, '2': 1,
@@ -154,7 +150,6 @@ export default class MillionaireGame {
     return await ActiveGame.findOne({ userId });
   }
 
-  // ✅ استخدام المساعدات
   async useFiftyFifty(user) {
     const game = await ActiveGame.findOne({ userId: user.userId });
     if (!game) return { error: null };
@@ -176,7 +171,7 @@ export default class MillionaireGame {
         msg += `✅ ${labels[i]}) ${opt}\n`;
       }
     });
-    return { success: true, message: msg };
+    return { message: msg };
   }
 
   async useSkip(user) {
@@ -198,6 +193,6 @@ export default class MillionaireGame {
     };
     await game.save();
 
-    return { success: true, message: this._formatQuestion(game, user) };
+    return { message: this._formatQuestion(game, user) };
   }
 }

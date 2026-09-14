@@ -34,42 +34,49 @@ export default class ShopSystem {
   }
 
   async showShop() {
-    const items = await ShopItem.find({ active: true, $or: [{ quantity: -1 }, { quantity: { $gt: 0 } }] });
+    // ✅ يخفي الكمية 0 تلقائيًا
+    const items = await ShopItem.find({
+      active: true,
+      $or: [{ quantity: -1 }, { quantity: { $gt: 0 } }]
+    });
 
     if (items.length === 0) return '🛒 السوق فارغ حاليًا.';
 
+    // ✅ الترتيب: external أولًا
     const categories = {
+      external: '🔀 منتجات خارجية',
       help: '🎫 مساعدات',
       cosmetic: '🎖️ ديكورات',
       permanent: '💎 ميزات دائمة'
     };
 
     let msg = '🛒 السوق\n\n';
+    let firstSection = true;
 
     for (const [cat, label] of Object.entries(categories)) {
       const catItems = items.filter(i => i.category === cat);
       if (catItems.length === 0) continue;
 
+      if (!firstSection) msg += '\n';
+      firstSection = false;
+
       msg += `${label}\n`;
       catItems.forEach(item => {
         const stock = item.quantity === -1 ? '' : ` (${item.quantity})`;
-        // ✅ عرض الاسم بمسافة بدل _
         const displayName = item.name.replace(/_/g, ' ');
         msg += `• ${displayName} — ${item.price} ريو${stock}\n`;
       });
-      msg += '\n';
     }
 
-    msg += '💡 اشتر [الاسم]';
+    msg += '\n💡 اشتر [الاسم]';
     return msg;
   }
 
   async purchase(user, itemName) {
-    // ✅ يقبل _ أو مسافة (تطبيع)
+    // ✅ يقبل _ أو مسافة
     const normalized = itemName.trim().replace(/\s+/g, '_');
     let item = await ShopItem.findOne({ name: normalized, active: true });
     if (!item) {
-      // محاولة ثانية بالاسم الأصلي
       item = await ShopItem.findOne({ name: itemName.trim(), active: true });
     }
     if (!item) return { error: `❌ المنتج غير موجود` };
@@ -88,27 +95,23 @@ export default class ShopSystem {
       return { error: `❌ رصيدك غير كافٍ.\n\n💰 رصيدك: ${user.rio}\n💵 السعر: ${finalPrice}` };
     }
 
-    // خصم الرصيد
     const spend = await this.points.spendRio(user, finalPrice);
     if (!spend.success) return { error: '❌ فشل الخصم' };
 
-    // تقليل الكمية
+    // ✅ إنقاص الكمية
     if (item.quantity !== -1) {
       item.quantity -= 1;
       await item.save();
     }
 
-    // تطبيق التأثير
     await this._applyEffect(user, item);
 
     user.purchases.push({ item: item.name, price: finalPrice });
     await user.save();
 
-    // شارات
     if (user.purchases.length === 1) await this.achievements.unlock(user, 'first_purchase');
     if (user.purchases.length === 10) await this.achievements.unlock(user, 'big_buyer');
 
-    // ✅ تنسيق جديد + عرض الاسم بمسافة
     const displayName = item.name.replace(/_/g, ' ');
 
     let msg = `✅ تم الشراء\n\n`;
@@ -153,8 +156,7 @@ export default class ShopSystem {
     }
   }
 
-  // ===== أوامر الأدمن =====
-  async addItem(name, price, quantity, description, category = 'help', effect = null, value = 0) {
+  async addItem(name, price, quantity, description, category = 'external', effect = null, value = 0) {
     const normalized = name.trim().replace(/\s+/g, '_');
     const exists = await ShopItem.findOne({ name: normalized });
     if (exists) return { error: '❌ الاسم موجود بالفعل' };
@@ -168,18 +170,17 @@ export default class ShopSystem {
       effect,
       value
     });
-    return { success: true, message: `✅ تم إضافة: ${name}` };
+    return { success: true, message: `✅ تم إضافة: ${name.replace(/_/g, ' ')}` };
   }
 
   async removeItem(name) {
-    // ✅ يقبل _ أو مسافة
     const normalized = name.trim().replace(/\s+/g, '_');
     let result = await ShopItem.deleteOne({ name: normalized });
     if (result.deletedCount === 0) {
       result = await ShopItem.deleteOne({ name: name.trim() });
     }
     if (result.deletedCount === 0) return { error: '❌ المنتج غير موجود' };
-    return { success: true, message: `✅ تم حذف: ${name}` };
+    return { success: true, message: `✅ تم حذف: ${name.replace(/_/g, ' ')}` };
   }
 
   async editItem(name, field, value) {

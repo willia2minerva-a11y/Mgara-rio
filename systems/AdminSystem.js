@@ -89,6 +89,9 @@ export default class AdminSystem {
     if (!target) return '❌ اللاعب غير موجود';
 
     let msg = `👤 ${target.userId}\n\n`;
+    msg += `🎮 معرف اللعبة: ${target.userId}\n`;
+    msg += `📱 معرف المنصة: ${target.platformId}\n`;
+    msg += `🌐 المنصة: ${target.platform}\n\n`;
     msg += `💰 الرصيد: ${target.rio}\n`;
     msg += `⭐ المستوى: ${target.level}\n`;
     msg += `📊 إجمالي مكتسب: ${target.totalEarned}\n`;
@@ -97,7 +100,6 @@ export default class AdminSystem {
     msg += `🏆 انتصارات: ${target.gamesWon}\n`;
     msg += `🎖️ شارات: ${target.achievements.length}\n`;
     msg += `👥 إحالات: ${target.referralCount}\n`;
-    msg += `📱 المنصة: ${target.platform} (${target.platformId})\n`;
     msg += `❄️ الحالة: ${target.isFrozen ? 'مجمّد' : 'نشط'}\n`;
     msg += `👑 أدمن: ${target.isAdmin ? 'نعم' : 'لا'}\n`;
     msg += `📅 مسجل: ${new Date(target.registeredAt).toLocaleDateString('ar-EG')}`;
@@ -194,4 +196,4 @@ export default class AdminSystem {
       }
     };
   }
-}
+  }

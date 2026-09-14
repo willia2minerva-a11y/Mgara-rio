@@ -12,10 +12,10 @@ export default class DailyGiftSystem {
     const now = today();
 
     if (user.lastGiftDate === now) {
-      return { error: '⏰ استلمت هديتك اليوم بالفعل. عد غدًا!' };
+      return { error: '⏰ استلمت هديتك اليوم. عد غدًا!' };
     }
 
-    // ✅ حساب Streak
+    // حساب Streak
     let newStreak = 1;
     if (user.lastGiftDate) {
       const diff = daysBetween(user.lastGiftDate, now);
@@ -23,7 +23,6 @@ export default class DailyGiftSystem {
       else newStreak = 1;
     }
 
-    // ✅ المكافأة الأساسية
     const baseReward = 1;
     const streakBonus = getStreakBonus(newStreak);
     const extraGift = user.permanentPerks?.extraGift || 0;
@@ -34,7 +33,7 @@ export default class DailyGiftSystem {
 
     await this.points.addRio(user, totalReward);
 
-    // ✅ الشارات
+    // الشارات
     if (newStreak === 7) await this.achievements.unlock(user, 'week_streak');
     if (newStreak === 30) await this.achievements.unlock(user, 'month_streak');
     if (newStreak === 365) await this.achievements.unlock(user, 'year_streak');
@@ -42,15 +41,16 @@ export default class DailyGiftSystem {
 
     await user.save();
 
+    // ✅ تنسيق جديد
     let msg = `🎁 هدية اليوم\n\n`;
-    msg += `💰 +${totalReward} ريو\n`;
+    msg += `+${totalReward} ريو\n\n`;
 
     if (streakBonus > 1) {
-      msg += `\n🎉 مكافأة Streak (${newStreak} يوم): +${streakBonus - 1} إضافية\n`;
+      msg += `🎉 مكافأة Streak: +${streakBonus - 1} إضافية\n\n`;
     }
 
-    msg += `\n🔥 Streak: ${newStreak} يوم\n`;
-    msg += `💎 رصيدك: ${user.rio} ريو`;
+    msg += `🔥 ${newStreak} يوم متتالي\n`;
+    msg += `💰 المجموع: ${user.rio} ريو`;
 
     return { success: true, message: msg };
   }

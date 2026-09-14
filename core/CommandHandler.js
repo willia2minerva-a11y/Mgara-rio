@@ -48,12 +48,11 @@ export default class CommandHandler {
       }
     }
 
-    // ✅ تحليل الأمر (دعم الأوامر المركبة)
+    // ✅ تحليل الأمر
     const parts = text.split(/\s+/);
     let cmd = parts[0];
     let args = parts.slice(1);
 
-    // إذا أول كلمتين تشكلان أمراً مركباً
     if (parts.length >= 2) {
       const twoWord = parts.slice(0, 2).join('_');
       if (COMPOUND_COMMANDS.includes(twoWord)) {
@@ -64,7 +63,6 @@ export default class CommandHandler {
 
     try {
       switch (cmd) {
-        // ===== أساسية =====
         case 'بدء':
         case 'start':
           return this._welcome(user);
@@ -95,7 +93,6 @@ export default class CommandHandler {
         case 'top':
           return await this.leaderboard.top10();
 
-        // ===== الألعاب =====
         case 'العب':
         case 'play':
           return await this._handlePlay(user);
@@ -117,7 +114,6 @@ export default class CommandHandler {
         case 'تخطي':
           return await this._handleSkip(user);
 
-        // ===== الفعاليات =====
         case 'هدية':
         case 'gift':
           return await this._handleGift(user);
@@ -132,7 +128,6 @@ export default class CommandHandler {
         case 'صديق':
           return await this._handleReferral(user, args);
 
-        // ===== السوق =====
         case 'سوق':
         case 'shop':
           return await this.shop.showShop();
@@ -147,7 +142,6 @@ export default class CommandHandler {
         case 'مهام':
           return await this.missions.show(user);
 
-        // ===== أوامر الأدمن =====
         case 'اضف_نقاط':
         case 'اضف_ريو':
           if (!this.admin.isAdmin(user)) return null;
@@ -466,20 +460,26 @@ export default class CommandHandler {
   }
 
   // ===================================
-  // الأكواد والإحالة
+  // ✅ إصلاح الكود
   // ===================================
   async _handleCode(user, args) {
     if (!args[0]) return null;
     const result = await this.codes.redeem(user, args[0]);
-    if (result.error === null || result.error === undefined) return null;
-    return result.message || result.error;
+    // ✅ إذا نجح → أرجع الرسالة
+    if (result && result.success) return result.message;
+    // إذا فشل بصمت → لا رد
+    return null;
   }
 
+  // ===================================
+  // ✅ إصلاح الإحالة
+  // ===================================
   async _handleReferral(user, args) {
     if (!args[0]) return null;
     const result = await this.referral.useReferral(user, args[0]);
-    if (result.error === null || result.error === undefined) return null;
-    return result.message || result.error;
+    if (result && result.success) return result.message;
+    if (result && result.error && typeof result.error === 'string') return result.error;
+    return null;
   }
 
   // ===================================
@@ -515,7 +515,8 @@ export default class CommandHandler {
     const quantity = parseInt(args[2]);
     const description = args.slice(3).join(' ');
     if (isNaN(price) || isNaN(quantity)) return '❌ أرقام خاطئة';
-    const result = await this.shop.addItem(name, price, quantity, description);
+    // ✅ الافتراضي = external (منتجات خارجية)
+    const result = await this.shop.addItem(name, price, quantity, description, 'external');
     return result.message || result.error;
   }
-  }
+      }

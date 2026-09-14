@@ -9,13 +9,19 @@ const userSchema = new mongoose.Schema({
   isAdmin: { type: Boolean, default: false },
 
   // العملة والمستوى
-  rio: { type: Number, default: 0, min: 0 },          // الرصيد الحالي
-  totalEarned: { type: Number, default: 0, min: 0 },  // إجمالي ما جمعه (للمستوى)
+  rio: { type: Number, default: 0, min: 0 },
+  totalEarned: { type: Number, default: 0, min: 0 },
   level: { type: Number, default: 1, min: 1 },
 
   // Streak الهدية
   streak: { type: Number, default: 0 },
   lastGiftDate: { type: String, default: null },
+
+  // حد اللعبة اليومية
+  lastGameDate: { type: String, default: null },
+
+  // التحدي اليومي
+  lastDailyChallenge: { type: String, default: null },
 
   // الحالة
   isFrozen: { type: Boolean, default: false },
@@ -39,7 +45,7 @@ const userSchema = new mongoose.Schema({
     date: { type: Date, default: Date.now }
   }],
 
-  // الميزات الدائمة
+  // ✅ الميزات الدائمة
   permanentPerks: {
     extraTime: { type: Number, default: 0 },
     extraDiscount: { type: Number, default: 0 },
@@ -47,7 +53,10 @@ const userSchema = new mongoose.Schema({
     freeSkip: { type: Boolean, default: false }
   },
 
-  // المساعدات (inventory)
+  // ✅ قائمة المنتجات الدائمة المشتراة (لمنع التكرار)
+  permanentItems: { type: [String], default: [] },
+
+  // المساعدات
   inventory: {
     fifty_fifty: { type: Number, default: 0 },
     skip: { type: Number, default: 0 },
@@ -72,10 +81,6 @@ const userSchema = new mongoose.Schema({
     referrals: { type: Number, default: 0 },
     completed: { type: [String], default: [] }
   },
-  
-  lastGameDate: { type: String, default: null },
-  // التحدي اليومي
-  lastDailyChallenge: { type: String, default: null },
 
   // التواريخ
   registeredAt: { type: Date, default: Date.now },

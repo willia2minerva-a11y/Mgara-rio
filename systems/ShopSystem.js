@@ -3,7 +3,7 @@ import ShopItem from '../models/ShopItem.js';
 import { getLevelBonus } from '../utils/helpers.js';
 
 const DEFAULT_ITEMS = [
-  { name: '50_50', price: 1, description: 'يحذف إجابتين خاطئتين', category: 'help', effect: 'fifty_fifty', value: 1 },
+  { name: '50:50', price: 1, description: 'يحذف إجابتين خاطئتين', category: 'help', effect: 'fifty_fifty', value: 1 },
   { name: 'تخطي_سؤال', price: 2, description: 'ينتقل لسؤال جديد', category: 'help', effect: 'skip', value: 1 },
   { name: 'سؤال_إضافي', price: 5, description: 'سؤال 6 في اللعبة', category: 'help', effect: 'extra_question', value: 1 },
   { name: 'إعادة_محاولة', price: 3, description: 'جولة ثانية لو خسرت', category: 'help', effect: 'retry', value: 1 },
@@ -50,21 +50,28 @@ export default class ShopSystem {
       const catItems = items.filter(i => i.category === cat);
       if (catItems.length === 0) continue;
 
-      msg += `${label}:\n`;
+      msg += `${label}\n`;
       catItems.forEach(item => {
-        const stock = item.quantity === -1 ? '∞' : item.quantity;
-        msg += `• ${item.name} — ${item.price} ريو (${stock})\n`;
-        msg += `  ${item.description}\n`;
+        const stock = item.quantity === -1 ? '' : ` (${item.quantity})`;
+        // ✅ عرض الاسم بمسافة بدل _
+        const displayName = item.name.replace(/_/g, ' ');
+        msg += `• ${displayName} — ${item.price} ريو${stock}\n`;
       });
       msg += '\n';
     }
 
-    msg += '💡 للشراء: اشتر [الاسم]';
+    msg += '💡 اشتر [الاسم]';
     return msg;
   }
 
   async purchase(user, itemName) {
-    const item = await ShopItem.findOne({ name: itemName, active: true });
+    // ✅ يقبل _ أو مسافة (تطبيع)
+    const normalized = itemName.trim().replace(/\s+/g, '_');
+    let item = await ShopItem.findOne({ name: normalized, active: true });
+    if (!item) {
+      // محاولة ثانية بالاسم الأصلي
+      item = await ShopItem.findOne({ name: itemName.trim(), active: true });
+    }
     if (!item) return { error: `❌ المنتج غير موجود` };
 
     // فحص الكمية
@@ -101,15 +108,17 @@ export default class ShopSystem {
     if (user.purchases.length === 1) await this.achievements.unlock(user, 'first_purchase');
     if (user.purchases.length === 10) await this.achievements.unlock(user, 'big_buyer');
 
-    // ✅ رسالة الشراء + رابط التواصل
+    // ✅ تنسيق جديد + عرض الاسم بمسافة
+    const displayName = item.name.replace(/_/g, ' ');
+
     let msg = `✅ تم الشراء\n\n`;
-    msg += `📦 المنتج: ${item.name}\n`;
+    msg += `📦 المنتج: ${displayName}\n`;
     msg += `💰 السعر: ${finalPrice} ريو`;
-    if (totalDiscount > 0) msg += ` (-${totalDiscount}%)`;
-    msg += `\n💳 رصيدك: ${user.rio} ريو\n`;
+    if (totalDiscount > 0) msg += ` (خصم ${totalDiscount}%)`;
+    msg += `\n💳 رصيدك: ${user.rio} ريو`;
 
     if (this.contactLink) {
-      msg += `\n📞 للتواصل مع الإدارة:\n${this.contactLink}`;
+      msg += `\n\n📞 للتواصل مع الإدارة:\n${this.contactLink}`;
     }
 
     return { success: true, message: msg };
@@ -141,35 +150,48 @@ export default class ShopSystem {
       case 'free_skip':
         user.permanentPerks.freeSkip = true;
         break;
-      // الديكورات تُحتسب تلقائيًا في الملف
     }
   }
 
-  // ✅ أوامر الأدمن
+  // ===== أوامر الأدمن =====
   async addItem(name, price, quantity, description, category = 'help', effect = null, value = 0) {
-    const exists = await ShopItem.findOne({ name });
+    const normalized = name.trim().replace(/\s+/g, '_');
+    const exists = await ShopItem.findOne({ name: normalized });
     if (exists) return { error: '❌ الاسم موجود بالفعل' };
 
     await ShopItem.create({
-      name, price, quantity: quantity === -1 ? -1 : quantity,
+      name: normalized,
+      price,
+      quantity: quantity === -1 ? -1 : quantity,
       description: description || '',
-      category, effect, value
+      category,
+      effect,
+      value
     });
     return { success: true, message: `✅ تم إضافة: ${name}` };
   }
 
   async removeItem(name) {
-    const result = await ShopItem.deleteOne({ name });
+    // ✅ يقبل _ أو مسافة
+    const normalized = name.trim().replace(/\s+/g, '_');
+    let result = await ShopItem.deleteOne({ name: normalized });
+    if (result.deletedCount === 0) {
+      result = await ShopItem.deleteOne({ name: name.trim() });
+    }
     if (result.deletedCount === 0) return { error: '❌ المنتج غير موجود' };
     return { success: true, message: `✅ تم حذف: ${name}` };
   }
 
   async editItem(name, field, value) {
-    const item = await ShopItem.findOne({ name });
+    const normalized = name.trim().replace(/\s+/g, '_');
+    let item = await ShopItem.findOne({ name: normalized });
+    if (!item) item = await ShopItem.findOne({ name: name.trim() });
     if (!item) return { error: '❌ المنتج غير موجود' };
+
     const allowed = ['price', 'quantity', 'description', 'category', 'active'];
     if (!allowed.includes(field)) return { error: '❌ الحقل غير مسموح' };
-    item[field] = field === 'quantity' || field === 'price' ? Number(value) : value;
+
+    item[field] = (field === 'quantity' || field === 'price') ? Number(value) : value;
     await item.save();
     return { success: true, message: `✅ تم تعديل ${field}` };
   }
@@ -178,10 +200,11 @@ export default class ShopSystem {
     const items = await ShopItem.find();
     if (items.length === 0) return '📋 لا توجد منتجات';
 
-    let msg = '📋 المنتجات:\n\n';
+    let msg = '📋 المنتجات\n\n';
     items.forEach(i => {
       const stock = i.quantity === -1 ? '∞' : i.quantity;
-      msg += `• ${i.name} — ${i.price} ريو (${stock}) [${i.category}]\n`;
+      const displayName = i.name.replace(/_/g, ' ');
+      msg += `• ${displayName} — ${i.price} ريو (${stock})\n`;
     });
     return msg;
   }

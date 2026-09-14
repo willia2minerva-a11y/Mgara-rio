@@ -1,5 +1,5 @@
 // core/CommandHandler.js
-import { ACHIEVEMENTS } from '../systems/AchievementSystem.js';
+import { today } from '../utils/helpers.js';
 
 export default class CommandHandler {
   constructor(systems) {
@@ -10,7 +10,7 @@ export default class CommandHandler {
     this.shop = systems.shop;
     this.codes = systems.codes;
     this.referral = systems.referral;
-    this.achievements = systems.achievements;
+    this.achievements = systems.achievementSystem;  // ✅ إصلاح
     this.missions = systems.missions;
     this.leaderboard = systems.leaderboard;
     this.admin = systems.adminSystem;
@@ -21,7 +21,6 @@ export default class CommandHandler {
     const text = (message || '').trim();
     if (!text) return null;
 
-    // ✅ الحصول/إنشاء المستخدم
     const user = await this.userSystem.getOrCreate(sender.id, sender.platform);
 
     // ✅ التجميد
@@ -37,162 +36,196 @@ export default class CommandHandler {
       }
     }
 
-    // ✅ تحليل الأمر
     const parts = text.split(/\s+/);
     const cmd = parts[0];
     const args = parts.slice(1);
 
-    // ✅ الأوامر
-    switch (cmd) {
-      case 'بدء':
-      case 'start':
-        return this._welcome(user);
-      case 'مساعدة':
-        return this._help(user);
-      case 'معرفي':
-        return `🆔 معرفك: ${user.userId}`;
-      case 'نقاطي':
-        return this._balance(user);
-      case 'ملفي':
-        return this._profile(user);
-      case 'توب':
-        return await this.leaderboard.top10();
+    try {
+      switch (cmd) {
+        // ===== أساسية =====
+        case 'بدء':
+        case 'start':
+          return this._welcome(user);
 
-      case 'هدية':
-        return await this._handleGift(user);
+        case 'مساعدة':
+        case 'help':
+          return this._help(user);
 
-      case 'العب':
-        return await this._handlePlay(user);
+        case 'مدير':
+        case 'admin':
+          if (!this.admin.isAdmin(user)) return null;
+          return this._adminHelp();
 
-      case 'تحدي':
-        return await this._handleChallenge(user);
+        case 'معرفي':
+        case 'id':
+          return this._myId(user);
 
-      case 'كود':
-        return await this._handleCode(user, args);
+        case 'نقاطي':
+        case 'رصيدي':
+          return this._balance(user);
 
-      case 'احالتي':
-        return await this.referral.showCode(user);
+        case 'ملفي':
+        case 'بروفايلي':
+        case 'profile':
+          return this._profile(user);
 
-      case 'صديق':
-        return await this._handleReferral(user, args);
+        case 'توب':
+        case 'top':
+          return await this.leaderboard.top10();
 
-      case 'سوق':
-        return await this.shop.showShop();
+        // ===== الألعاب =====
+        case 'العب':
+        case 'play':
+          return await this._handlePlay(user);
 
-      case 'اشتر':
-        return await this._handleBuy(user, args);
+        case 'تحدي':
+        case 'challenge':
+          return await this._handleChallenge(user);
 
-      case 'مشترياتي':
-        return this._purchases(user);
+        case 'أ': case 'ا': case 'a': case '1':
+        case 'ب': case 'b': case '2':
+        case 'ج': case 'c': case '3':
+        case 'د': case 'd': case '4':
+          return await this._handleGameAnswer(user, cmd);
 
-      case 'مهام':
-        return await this.missions.show(user);
+        case '50':
+        case '50:50':
+          return await this._handleFifty(user);
 
-      case '50':
-      case '50:50':
-        return await this._handleFifty(user);
+        case 'تخطي':
+          return await this._handleSkip(user);
 
-      case 'تخطي':
-        return await this._handleSkip(user);
+        // ===== الفعاليات =====
+        case 'هدية':
+        case 'gift':
+          return await this._handleGift(user);
 
-      // ✅ إجابات اللعبة (أ ب ج د)
-      case 'أ': case 'ا': case 'a': case '1':
-      case 'ب': case 'b': case '2':
-      case 'ج': case 'c': case '3':
-      case 'د': case 'd': case '4':
-        return await this._handleGameAnswer(user, cmd);
+        case 'كود':
+          return await this._handleCode(user, args);
 
-      // ===================================
-      // ✅ أوامر الأدمن
-      // ===================================
-      case 'اضف_نقاط':
-      case 'اضف_ريو':
-        if (!this._guardAdmin(user)) return this._notAdmin();
-        return await this.admin.addPoints(user, args[0], parseInt(args[1]));
-      case 'خصم_نقاط':
-      case 'خصم_ريو':
-        if (!this._guardAdmin(user)) return this._notAdmin();
-        return await this.admin.removePoints(user, args[0], parseInt(args[1]));
-      case 'عدل_نقاط':
-        if (!this._guardAdmin(user)) return this._notAdmin();
-        return await this.admin.setPoints(user, args[0], parseInt(args[1]));
+        case 'احالتي':
+        case 'كودي':
+          return await this.referral.showCode(user);
 
-      case 'تجميد':
-        if (!this._guardAdmin(user)) return this._notAdmin();
-        return await this.admin.freeze(user, args[0]);
-      case 'فك_تجميد':
-        if (!this._guardAdmin(user)) return this._notAdmin();
-        return await this.admin.unfreeze(user, args[0]);
-      case 'حذف':
-        if (!this._guardAdmin(user)) return this._notAdmin();
-        return await this.admin.deleteUser(user, args[0]);
-      case 'عرض_لاعب':
-        if (!this._guardAdmin(user)) return this._notAdmin();
-        return await this.admin.showPlayer(args[0]);
+        case 'صديق':
+          return await this._handleReferral(user, args);
 
-      case 'عرض_اللاعبين':
-        if (!this._guardAdmin(user)) return this._notAdmin();
-        return await this.admin.listPlayers(parseInt(args[0]) || 1);
-      case 'عرض_المجمدين':
-        if (!this._guardAdmin(user)) return this._notAdmin();
-        return await this.admin.listFrozen();
-      case 'عرض_الاكواد':
-        if (!this._guardAdmin(user)) return this._notAdmin();
-        return await this.codes.listAll();
-      case 'عرض_المنتجات':
-        if (!this._guardAdmin(user)) return this._notAdmin();
-        return await this.shop.listAll();
-      case 'احصائيات':
-        if (!this._guardAdmin(user)) return this._notAdmin();
-        return await this.admin.stats();
+        // ===== السوق =====
+        case 'سوق':
+        case 'shop':
+          return await this.shop.showShop();
 
-      case 'اضف_منتج':
-        if (!this._guardAdmin(user)) return this._notAdmin();
-        return await this._handleAddProduct(user, args);
-      case 'حذف_منتج':
-        if (!this._guardAdmin(user)) return this._notAdmin();
-        return (await this.shop.removeItem(args.join(' '))).message || '❌ فشل';
-      case 'عدل_منتج':
-        if (!this._guardAdmin(user)) return this._notAdmin();
-        return (await this.shop.editItem(args[0], args[1], args.slice(2).join(' '))).message || '❌ فشل';
+        case 'اشتر':
+        case 'buy':
+          return await this._handleBuy(user, args);
 
-      case 'اضف_كود':
-        if (!this._guardAdmin(user)) return this._notAdmin();
-        return (await this.codes.create(args[0], parseInt(args[1]), parseInt(args[2]), user.userId)).message || '❌ فشل';
-      case 'حذف_كود':
-        if (!this._guardAdmin(user)) return this._notAdmin();
-        return (await this.codes.remove(args[0])).message || '❌ فشل';
+        case 'مشترياتي':
+          return this._purchases(user);
 
-      case 'اعطي_ادمن':
-        if (!this._guardAdmin(user)) return this._notAdmin();
-        return await this.admin.promote(user, args[0]);
-      case 'ازل_ادمن':
-        if (!this._guardAdmin(user)) return this._notAdmin();
-        return await this.admin.demote(user, args[0]);
+        case 'مهام':
+          return await this.missions.show(user);
 
-      case 'رسالة': {
-        if (!this._guardAdmin(user)) return this._notAdmin();
-        const res = await this.admin.sendMessage(user, args[0], args.slice(1).join(' '));
-        if (res.error) return res.error;
-        return { sendTo: res.sendTo };
+        // ===== أوامر الأدمن =====
+        case 'اضف_نقاط':
+        case 'اضف_ريو':
+          if (!this.admin.isAdmin(user)) return null;
+          return await this.admin.addPoints(user, args[0], parseInt(args[1]));
+
+        case 'خصم_نقاط':
+        case 'خصم_ريو':
+          if (!this.admin.isAdmin(user)) return null;
+          return await this.admin.removePoints(user, args[0], parseInt(args[1]));
+
+        case 'عدل_نقاط':
+          if (!this.admin.isAdmin(user)) return null;
+          return await this.admin.setPoints(user, args[0], parseInt(args[1]));
+
+        case 'تجميد':
+          if (!this.admin.isAdmin(user)) return null;
+          return await this.admin.freeze(user, args[0]);
+
+        case 'فك_تجميد':
+          if (!this.admin.isAdmin(user)) return null;
+          return await this.admin.unfreeze(user, args[0]);
+
+        case 'حذف':
+          if (!this.admin.isAdmin(user)) return null;
+          return await this.admin.deleteUser(user, args[0]);
+
+        case 'عرض_لاعب':
+          if (!this.admin.isAdmin(user)) return null;
+          return await this.admin.showPlayer(args[0]);
+
+        case 'عرض_اللاعبين':
+          if (!this.admin.isAdmin(user)) return null;
+          return await this.admin.listPlayers(parseInt(args[0]) || 1);
+
+        case 'عرض_المجمدين':
+          if (!this.admin.isAdmin(user)) return null;
+          return await this.admin.listFrozen();
+
+        case 'عرض_الاكواد':
+          if (!this.admin.isAdmin(user)) return null;
+          return await this.codes.listAll();
+
+        case 'عرض_المنتجات':
+          if (!this.admin.isAdmin(user)) return null;
+          return await this.shop.listAll();
+
+        case 'احصائيات':
+          if (!this.admin.isAdmin(user)) return null;
+          return await this.admin.stats();
+
+        case 'اضف_منتج':
+          if (!this.admin.isAdmin(user)) return null;
+          return await this._handleAddProduct(user, args);
+
+        case 'حذف_منتج':
+          if (!this.admin.isAdmin(user)) return null;
+          return (await this.shop.removeItem(args.join(' '))).message || null;
+
+        case 'عدل_منتج':
+          if (!this.admin.isAdmin(user)) return null;
+          return (await this.shop.editItem(args[0], args[1], args.slice(2).join(' '))).message || null;
+
+        case 'اضف_كود':
+          if (!this.admin.isAdmin(user)) return null;
+          return (await this.codes.create(args[0], parseInt(args[1]), parseInt(args[2]), user.userId)).message || null;
+
+        case 'حذف_كود':
+          if (!this.admin.isAdmin(user)) return null;
+          return (await this.codes.remove(args[0])).message || null;
+
+        case 'اعطي_ادمن':
+          if (!this.admin.isAdmin(user)) return null;
+          return await this.admin.promote(user, args[0]);
+
+        case 'ازل_ادمن':
+          if (!this.admin.isAdmin(user)) return null;
+          return await this.admin.demote(user, args[0]);
+
+        case 'رسالة': {
+          if (!this.admin.isAdmin(user)) return null;
+          const res = await this.admin.sendMessage(user, args[0], args.slice(1).join(' '));
+          if (res.error) return res.error;
+          return { sendTo: res.sendTo };
+        }
+
+        default:
+          return null;
       }
-
-      default:
-        return null; // صمت لأي أمر غير معروف
+    } catch (error) {
+      console.error('❌ خطأ في معالجة الأمر:', error.message);
+      return null;
     }
   }
 
-  _guardAdmin(user) {
-    return this.admin.isAdmin(user);
-  }
-
-  _notAdmin() {
-    return null; // صمت
-  }
-
+  // ===================================
+  // الرسائل الأساسية
+  // ===================================
   _welcome(user) {
-    if (user.userId === 'M000R') {
-      return `👑 مرحباً بك يا ملك\n\n🆔 ${user.userId}\n\n💡 "مساعدة" لعرض الأوامر`;
+    if (user.isAdmin) {
+      return `👑 مرحباً بك يا ملك\n\n🆔 ${user.userId}\n\n💡 اكتب "مساعدة" للأوامر\n👑 اكتب "مدير" لأوامر الأدمن`;
     }
     return `🏔️ مرحباً بك في مغارة ريو\n\n🆔 معرفك: ${user.userId}\n💰 رصيدك: ${user.rio} ريو\n\n💡 اكتب "مساعدة" للأوامر`;
   }
@@ -200,13 +233,13 @@ export default class CommandHandler {
   _help(user) {
     let msg = '📋 الأوامر المتاحة\n\n';
     msg += '👤 أساسية:\n';
-    msg += '• معرفي — معرفك\n';
+    msg += '• معرفي — معرّفك\n';
     msg += '• نقاطي — رصيدك\n';
     msg += '• ملفي — كل التفاصيل\n';
     msg += '• توب — أفضل 10\n\n';
 
     msg += '🎮 الألعاب:\n';
-    msg += '• العب — لعبة جديدة\n';
+    msg += '• العب — لعبة (مرة/يوم)\n';
     msg += '• تحدي — تحدي اليوم\n';
     msg += '• أ/ب/ج/د — إجابتك\n\n';
 
@@ -228,6 +261,49 @@ export default class CommandHandler {
       msg += '\n👑 اكتب "مدير" لأوامر الأدمن';
     }
     return msg;
+  }
+
+  _adminHelp() {
+    let msg = '👑 أوامر الأدمن\n\n';
+    msg += '💰 النقاط:\n';
+    msg += '• اضف_نقاط [ID] [الكمية]\n';
+    msg += '• خصم_نقاط [ID] [الكمية]\n';
+    msg += '• عدل_نقاط [ID] [الكمية]\n\n';
+
+    msg += '👥 اللاعبون:\n';
+    msg += '• تجميد [ID]\n';
+    msg += '• فك_تجميد [ID]\n';
+    msg += '• حذف [ID]\n';
+    msg += '• عرض_لاعب [ID]\n\n';
+
+    msg += '📋 القوائم:\n';
+    msg += '• عرض_اللاعبين [صفحة]\n';
+    msg += '• عرض_المجمدين\n';
+    msg += '• عرض_الاكواد\n';
+    msg += '• عرض_المنتجات\n';
+    msg += '• احصائيات\n\n';
+
+    msg += '🛒 المنتجات:\n';
+    msg += '• اضف_منتج [الاسم] [السعر] [الكمية] [الوصف]\n';
+    msg += '• حذف_منتج [الاسم]\n';
+    msg += '• عدل_منتج [الاسم] [الحقل] [القيمة]\n\n';
+
+    msg += '🎫 الأكواد:\n';
+    msg += '• اضف_كود [الكود] [الريو] [العدد]\n';
+    msg += '• حذف_كود [الكود]\n\n';
+
+    msg += '👑 الأدمن:\n';
+    msg += '• اعطي_ادمن [ID]\n';
+    msg += '• ازل_ادمن [ID]\n\n';
+
+    msg += '📩 التواصل:\n';
+    msg += '• رسالة [ID] [النص]\n';
+
+    return msg;
+  }
+
+  _myId(user) {
+    return `🆔 معلوماتك\n\n🎮 معرف اللعبة: ${user.userId}\n📱 معرف المنصة: ${user.platformId}\n🌐 المنصة: ${user.platform}\n${user.isAdmin ? '👑 أدمن: نعم' : ''}`;
   }
 
   _balance(user) {
@@ -260,6 +336,9 @@ export default class CommandHandler {
     return msg;
   }
 
+  // ===================================
+  // الفعاليات
+  // ===================================
   async _handleGift(user) {
     const result = await this.dailyGift.claim(user);
     if (result.error) return result.error;
@@ -270,69 +349,110 @@ export default class CommandHandler {
     return msg;
   }
 
+  // ===================================
+  // الألعاب
+  // ===================================
   async _handlePlay(user) {
-    // إذا كان في لعبة نشطة
+    // ✅ فحص لعبة نشطة
     const active = await this.game.getActiveGame(user.userId);
     if (active) return '🎮 لديك لعبة نشطة. أجب على السؤال الحالي.';
 
-    const msg = await this.game.start(user, 'easy');
-    return msg;
-  }
-
-  async _handleGameAnswer(user, answer) {
-    const result = await this.game.handleAnswer(user, answer);
-    if (result.error === null) return null; // صمت
-    if (result.error) return result.error;
-
-    // فحص الإحالة بعد أول لعبة مكتملة
-    if (user.gamesPlayed === 1) {
-      await this.referral.completeReferral(user);
+    // ✅ فحص الحد اليومي
+    const todayStr = today();
+    if (user.lastGameDate === todayStr) {
+      return '🎮 لعبت اليوم. عد غدًا!\n\n💡 استخدم "تحدي" للسؤال اليومي';
     }
 
-    // تتبع المهام
-    if (user.gamesPlayed > 0) {
-      await this.missions.track(user, 'gamesPlayed');
-      if (result.message.includes('5/5')) {
-        await this.missions.track(user, 'gamesWon');
-      }
-      await this.missions.check(user);
-    }
+    user.lastGameDate = todayStr;
+    await user.save();
 
-    // شارات الرصيد
-    await this.achievements.checkRioAchievements(user);
-
-    return result.message;
+    return await this.game.start(user, 'easy');
   }
 
   async _handleChallenge(user) {
-    const { today } = await import('../utils/helpers.js');
-    if (user.lastDailyChallenge === today()) {
+    const todayStr = today();
+    if (user.lastDailyChallenge === todayStr) {
       return '⏰ حللت تحدي اليوم. عد غدًا!';
     }
 
     const active = await this.game.getActiveGame(user.userId);
     if (active) return '🎮 أنهِ لعبتك الحالية أولًا.';
 
-    user.lastDailyChallenge = today();
+    user.lastDailyChallenge = todayStr;
     await user.save();
 
     return await this.game.start(user, 'medium');
   }
 
+  async _handleGameAnswer(user, answer) {
+    const result = await this.game.handleAnswer(user, answer);
+
+    // ✅ صمت
+    if (result.silent) return null;
+
+    // ✅ خطأ
+    if (result.error) return result.error;
+
+    // ✅ نجاح — معالجة إضافية
+    try {
+      if (user.gamesPlayed === 1 && user.referredBy) {
+        await this.referral.completeReferral(user);
+      }
+
+      await this.missions.track(user, 'gamesPlayed');
+      if (result.message && result.message.includes('5/5')) {
+        await this.missions.track(user, 'gamesWon');
+      }
+      await this.missions.check(user);
+
+      // شارات الرصيد
+      await this.achievements.checkRioAchievements(user);
+    } catch (e) {
+      console.error('⚠️ خطأ في المعالجة الإضافية:', e.message);
+    }
+
+    return result.message;
+  }
+
+  // ===================================
+  // المساعدات
+  // ===================================
+  async _handleFifty(user) {
+    const active = await this.game.getActiveGame(user.userId);
+    if (!active) return null;
+    const result = await this.game.useFiftyFifty(user);
+    if (result.error) return result.error;
+    return result.message;
+  }
+
+  async _handleSkip(user) {
+    const active = await this.game.getActiveGame(user.userId);
+    if (!active) return null;
+    const result = await this.game.useSkip(user);
+    if (result.error) return result.error;
+    return result.message;
+  }
+
+  // ===================================
+  // الأكواد والإحالة
+  // ===================================
   async _handleCode(user, args) {
     if (!args[0]) return null;
     const result = await this.codes.redeem(user, args[0]);
-    if (result.error === null) return null;
-    return result.message;
+    if (result.error === null || result.error === undefined) return null;
+    return result.message || result.error;
   }
 
   async _handleReferral(user, args) {
     if (!args[0]) return null;
     const result = await this.referral.useReferral(user, args[0]);
-    if (result.error === null) return null;
+    if (result.error === null || result.error === undefined) return null;
     return result.message || result.error;
   }
 
+  // ===================================
+  // السوق
+  // ===================================
   async _handleBuy(user, args) {
     if (!args[0]) return null;
     const result = await this.shop.purchase(user, args.join(' '));
@@ -355,22 +475,6 @@ export default class CommandHandler {
     return msg;
   }
 
-  async _handleFifty(user) {
-    const active = await this.game.getActiveGame(user.userId);
-    if (!active) return null;
-    const result = await this.game.useFiftyFifty(user);
-    if (result.error) return result.error;
-    return result.message;
-  }
-
-  async _handleSkip(user) {
-    const active = await this.game.getActiveGame(user.userId);
-    if (!active) return null;
-    const result = await this.game.useSkip(user);
-    if (result.error) return result.error;
-    return result.message;
-  }
-
   async _handleAddProduct(admin, args) {
     if (args.length < 4) return '❌ الاستخدام: اضف_منتج [الاسم] [السعر] [الكمية] [الوصف]';
     const name = args[0];
@@ -381,4 +485,4 @@ export default class CommandHandler {
     const result = await this.shop.addItem(name, price, quantity, description);
     return result.message || result.error;
   }
-}
+    }

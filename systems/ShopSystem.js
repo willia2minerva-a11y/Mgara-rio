@@ -2,15 +2,12 @@
 import ShopItem from '../models/ShopItem.js';
 import { getLevelBonus } from '../utils/helpers.js';
 
+// ✅ تم حذف فئة cosmetic (ديكورات)
 const DEFAULT_ITEMS = [
   { name: '50:50', price: 1, description: 'يحذف إجابتين خاطئتين', category: 'help', effect: 'fifty_fifty', value: 1 },
   { name: 'تخطي_سؤال', price: 2, description: 'ينتقل لسؤال جديد', category: 'help', effect: 'skip', value: 1 },
   { name: 'سؤال_إضافي', price: 5, description: 'سؤال 6 في اللعبة', category: 'help', effect: 'extra_question', value: 1 },
   { name: 'إعادة_محاولة', price: 3, description: 'جولة ثانية لو خسرت', category: 'help', effect: 'retry', value: 1 },
-  { name: 'شارة_ذهبية', price: 15, description: 'شارة مميزة في ملفك', category: 'cosmetic', effect: 'badge_gold', value: 1 },
-  { name: 'شارة_نادرة', price: 40, description: 'شارة نادرة جدًا', category: 'cosmetic', effect: 'badge_rare', value: 1 },
-  { name: 'لقب_مخصص', price: 60, description: 'لقب تختاره', category: 'cosmetic', effect: 'custom_title', value: 1 },
-  { name: 'إطار_ملف', price: 25, description: 'إطار جميل', category: 'cosmetic', effect: 'frame', value: 1 },
   { name: '+2_ثواني_دائم', price: 100, description: 'زيادة دائمة للوقت (مرة واحدة)', category: 'permanent', effect: 'extra_time', value: 2 },
   { name: 'خصم_5%', price: 150, description: 'خصم إضافي دائم (مرة واحدة)', category: 'permanent', effect: 'extra_discount', value: 5 },
   { name: 'هدية_+1', price: 200, description: 'هدية يومية إضافية (مرة واحدة)', category: 'permanent', effect: 'extra_gift', value: 1 },
@@ -34,16 +31,15 @@ export default class ShopSystem {
   }
 
   // ===================================
-  // عرض السوق
+  // عرض السوق (بدون ديكورات)
   // ===================================
   async showShop(user) {
-    // فلترة الكمية > 0
     let items = await ShopItem.find({
       active: true,
+      category: { $ne: 'cosmetic' }, // ✅ استبعاد الديكورات
       $or: [{ quantity: -1 }, { quantity: { $gt: 0 } }]
     });
 
-    // فلترة المنتجات الدائمة المشتراة
     const ownedPermanent = user?.permanentItems || [];
     items = items.filter(i => {
       if (i.category === 'permanent' && ownedPermanent.includes(i.name)) return false;
@@ -56,7 +52,6 @@ export default class ShopSystem {
       external: '🔀 منتجات خارجية',
       wheel: '🎡 دولاب الحظ',
       help: '🎫 مساعدات',
-      cosmetic: '🎖️ ديكورات',
       permanent: '💎 ميزات دائمة'
     };
 
@@ -83,7 +78,7 @@ export default class ShopSystem {
   }
 
   // ===================================
-  // شراء منتج
+  // شراء
   // ===================================
   async purchase(user, itemName) {
     const normalized = itemName.trim().replace(/\s+/g, '_');
@@ -91,17 +86,14 @@ export default class ShopSystem {
     if (!item) item = await ShopItem.findOne({ name: itemName.trim(), active: true });
     if (!item) return { error: `❌ المنتج غير موجود` };
 
-    // فحص المنتجات الدائمة (لا تكرار)
     if (item.category === 'permanent' && user.permanentItems?.includes(item.name)) {
       return { error: '❌ تملك هذا المنتج بالفعل!' };
     }
 
-    // فحص الكمية
     if (item.quantity !== -1 && item.quantity <= 0) {
       return { error: '❌ المنتج نفد!' };
     }
 
-    // حساب السعر
     const levelBonus = getLevelBonus(user.level);
     const shopDiscount = user.permanentPerks?.extraDiscount || 0;
     const totalDiscount = Math.min(50, levelBonus.discount + shopDiscount);
@@ -114,21 +106,17 @@ export default class ShopSystem {
     const spend = await this.points.spendRio(user, finalPrice);
     if (!spend.success) return { error: '❌ فشل الخصم' };
 
-    // إنقاص الكمية
     if (item.quantity !== -1) {
       item.quantity -= 1;
       await item.save();
     }
 
-    // دولاب حظ؟
     if (item.category === 'wheel') {
       return await this._spinWheel(user, item, finalPrice, totalDiscount);
     }
 
-    // تطبيق التأثير
     await this._applyEffect(user, item);
 
-    // تسجيل المنتجات الدائمة
     if (item.category === 'permanent') {
       user.permanentItems = user.permanentItems || [];
       user.permanentItems.push(item.name);
@@ -155,9 +143,6 @@ export default class ShopSystem {
     return { success: true, message: msg };
   }
 
-  // ===================================
-  // لفّ دولاب الحظ
-  // ===================================
   async _spinWheel(user, item, paidPrice, discount) {
     if (!item.wheelPrizes || item.wheelPrizes.length === 0) {
       return { error: '❌ الدولاب غير مكتمل' };
@@ -205,7 +190,6 @@ export default class ShopSystem {
 
     const displayName = item.name.replace(/_/g, ' ');
 
-    // ✅ التنسيق الجديد
     let msg = `🎡 ${displayName}\n\n`;
     msg += `💰 السعر: ${paidPrice} ريو\n`;
     msg += `💳 رصيدك: ${user.rio} ريو\n\n`;
@@ -214,9 +198,6 @@ export default class ShopSystem {
     return { success: true, message: msg };
   }
 
-  // ===================================
-  // تطبيق التأثير
-  // ===================================
   async _applyEffect(user, item) {
     switch (item.effect) {
       case 'fifty_fifty': user.inventory.fifty_fifty += (item.value || 1); break;
@@ -231,7 +212,7 @@ export default class ShopSystem {
   }
 
   // ===================================
-  // إدارة المنتجات (أدمن)
+  // أوامر الأدمن
   // ===================================
   async addItem(name, price, quantity, description, category = 'external', wheelPrizes = null) {
     const normalized = name.trim().replace(/\s+/g, '_');
@@ -287,9 +268,6 @@ export default class ShopSystem {
     return msg;
   }
 
-  // ===================================
-  // تحليل جوائز الدولاب
-  // ===================================
   parsePrizes(text) {
     const cleaned = text.replace(/[\[\]]/g, '').trim();
     const parts = cleaned.split(',').map(p => p.trim()).filter(Boolean);
@@ -301,4 +279,4 @@ export default class ShopSystem {
       return { type: 'item', value: p.replace(/\s+/g, '_') };
     });
   }
-  }
+}

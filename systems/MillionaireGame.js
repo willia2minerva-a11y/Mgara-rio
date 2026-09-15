@@ -1,11 +1,47 @@
 // systems/MillionaireGame.js
 import ActiveGame from '../models/ActiveGame.js';
-import User from '../models/User.js';
 import { FALLBACK_QUESTIONS } from '../data/fallback-questions.js';
 import { pickRandom } from '../utils/helpers.js';
 
 const POINTS_PER_QUESTION = [1, 2, 3, 4, 5];
 const TIME_LIMIT_SECONDS = 30;
+
+// ✅ أسئلة التحدي (كتابة حرة) - مخزنة منفصلة
+const CHALLENGE_QUESTIONS = [
+  { q: 'ما هي عاصمة أستراليا؟', a: 'كانبرا' },
+  { q: 'من اخترع المصباح الكهربائي؟', a: 'إديسون' },
+  { q: 'ما هو أكبر كوكب في المجموعة الشمسية؟', a: 'المشتري' },
+  { q: 'كم عدد عظام جسم الإنسان البالغ؟', a: '206' },
+  { q: 'ما هو أطول نهر في العالم؟', a: 'النيل' },
+  { q: 'من هو مؤلف رواية البؤساء؟', a: 'فيكتور هوغو' },
+  { q: 'ما هي عملة اليابان؟', a: 'الين' },
+  { q: 'في أي عام سقط برج التجارة العالمي؟', a: '2001' },
+  { q: 'ما هو أكبر محيط في العالم؟', a: 'الهادئ' },
+  { q: 'كم عدد قلوب الأخطبوط؟', a: '3' },
+  { q: 'ما هي أصغر دولة في العالم؟', a: 'الفاتيكان' },
+  { q: 'ما هو الرمز الكيميائي للذهب؟', a: 'Au' },
+  { q: 'من رسم لوحة الموناليزا؟', a: 'دافنشي' },
+  { q: 'ما هي أكبر جزيرة في العالم؟', a: 'جرينلاند' },
+  { q: 'كم سنة ضوئية يبعد أقرب نجم؟', a: '4.2' },
+  { q: 'ما هي أكبر دولة عربية مساحة؟', a: 'الجزائر' },
+  { q: 'كم عدد فقرات العمود الفقري؟', a: '33' },
+  { q: 'ما هو الغاز الأكثر وفرة في الجو؟', a: 'النيتروجين' },
+  { q: 'من مؤسس علم الجبر؟', a: 'الخوارزمي' },
+  { q: 'ما هو أكبر حيوان على الأرض؟', a: 'الحوت الأزرق' }
+];
+
+// ✅ دالة تطبيع النص للمقارنة
+function normalizeArabic(text) {
+  return String(text)
+    .trim()
+    .toLowerCase()
+    .replace(/[أإآا]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/[^\u0600-\u06FFa-z0-9\s\.]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 export default class MillionaireGame {
   constructor(pointsSystem, achievementSystem, gemini) {
@@ -40,48 +76,52 @@ export default class MillionaireGame {
   }
 
   // ===================================
-  // 🎯 تحدي (سؤال واحد صعب)
+  // 🎯 تحدي (سؤال واحد صعب - بدون خيارات)
   // ===================================
   async startChallenge(user) {
     await ActiveGame.deleteOne({ userId: user.userId });
 
-    const question = await this._getQuestion('hard', true);
+    const question = await this._getChallengeQuestion();
 
     user.challengeActive = true;
     user.challengeQuestion = {
       text: question.q,
-      options: question.o,
-      correctIndex: question.a,
+      answer: question.a,
       sentAt: new Date()
     };
     user.lastChallengeDate = new Date().toISOString().split('T')[0];
     await user.save();
 
-    const labels = ['أ', 'ب', 'ج', 'د'];
     let msg = `🎯 تحدي اليوم\n\n`;
     msg += `❓ ${question.q}\n\n`;
-    question.o.forEach((opt, i) => {
-      msg += `${labels[i]}) ${opt}\n`;
-    });
-    msg += `\n⏱️ 30 ثانية\n`;
+    msg += `⏱️ 30 ثانية\n`;
     msg += `💎 الجائزة: 3 ريو\n`;
-    msg += `\n💡 اكتب: أ / ب / ج / د`;
+    msg += `\n💡 اكتب إجابتك`;
 
     return msg;
   }
 
+  async _getChallengeQuestion() {
+    // محاولة Gemini أولًا (50%)
+    if (this.gemini && this.gemini.enabled && Math.random() < 0.5) {
+      // Gemini للتحدي — نطلب سؤال مقالي
+      // لكن بما أن Gemini مُهيأ للخيارات، نستخدم البنك
+      // TODO: يمكن إضافة دالة generateEssayQuestion لاحقًا
+    }
+    return pickRandom(CHALLENGE_QUESTIONS);
+  }
+
   // ===================================
-  // معالجة إجابة تحدي
+  // معالجة إجابة التحدي (نص حر)
   // ===================================
-  async handleChallengeAnswer(user, answer) {
+  async handleChallengeAnswer(user, answerText) {
     if (!user.challengeActive || !user.challengeQuestion) {
       return { silent: true };
     }
 
-    const { sentAt, correctIndex, options } = user.challengeQuestion;
+    const { sentAt, answer } = user.challengeQuestion;
     const elapsed = (Date.now() - new Date(sentAt).getTime()) / 1000;
 
-    // تجاوز الوقت
     if (elapsed > 30) {
       user.challengeActive = false;
       user.challengeQuestion = null;
@@ -89,22 +129,24 @@ export default class MillionaireGame {
       return { silent: true };
     }
 
-    const answerIndex = this._parseAnswer(answer);
-    if (answerIndex === -1) return { silent: true };
+    const userAns = normalizeArabic(answerText);
+    const correctAns = normalizeArabic(answer);
 
-    const correct = answerIndex === correctIndex;
+    // تحقق ذكي: تطابق تام أو احتواء
+    const isCorrect = userAns === correctAns ||
+                     userAns.includes(correctAns) ||
+                     correctAns.includes(userAns) && userAns.length >= 3;
 
     user.challengeActive = false;
     user.challengeQuestion = null;
 
-    if (!correct) {
+    if (!isCorrect) {
       await user.save();
       return {
-        message: `❌ إجابة خاطئة\n\n💡 حاول غدًا!`
+        message: `❌ إجابة خاطئة\n\n💡 الإجابة الصحيحة: ${answer}\n\nحاول غدًا!`
       };
     }
 
-    // ✅ صحيح → +3 ريو
     await this.points.addRio(user, 3);
     user.dailyChallengesDone = (user.dailyChallengesDone || 0) + 1;
     await this.achievements.unlock(user, 'first_win');
@@ -121,13 +163,12 @@ export default class MillionaireGame {
   }
 
   // ===================================
-  // جلب الأسئلة
+  // جلب أسئلة اللعبة العادية
   // ===================================
   async _getQuestion(difficulty, useGemini = false) {
     const pool = FALLBACK_QUESTIONS.filter(q => q.d === difficulty);
     const fallbackPool = pool.length > 0 ? pool : FALLBACK_QUESTIONS;
 
-    // Gemini: 20% في اللعبة العادية، 50% في التحدي
     const geminiChance = useGemini ? 0.5 : 0.2;
 
     if (this.gemini && this.gemini.enabled && Math.random() < geminiChance) {
@@ -158,13 +199,10 @@ export default class MillionaireGame {
     return msg;
   }
 
-  // ===================================
-  // معالجة إجابة اللعبة العادية
-  // ===================================
   async handleAnswer(user, answer) {
     const game = await ActiveGame.findOne({ userId: user.userId });
     if (!game) {
-      return { error: '❌ لا توجد لعبة نشطة. اكتب "العب اسئلة"' };
+      return { silent: true }; // ✅ صمت تام
     }
 
     const { sentAt } = game.currentQuestion;
@@ -285,4 +323,4 @@ export default class MillionaireGame {
 
     return { message: this._formatQuestion(game, user) };
   }
-}
+                                           }

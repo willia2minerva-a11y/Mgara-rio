@@ -17,17 +17,29 @@ const userSchema = new mongoose.Schema({
   streak: { type: Number, default: 0 },
   lastGiftDate: { type: String, default: null },
 
-  // حد لعبة "اسئلة" اليومية
-  lastGameDate: { type: String, default: null },
-
-  // التحدي اليومي (سؤال واحد صعب - بدون خيارات)
-  lastChallengeDate: { type: String, default: null },
-  challengeActive: { type: Boolean, default: false },
-  challengeQuestion: {
-    text: String,
-    answer: String,     // ✅ الإجابة النصية (بدون خيارات)
-    sentAt: Date
+  // حد اللعبة اليومية (لكل لعبة)
+  gamesPlayedToday: {
+    type: Map,
+    of: String,  // تاريخ آخر لعب لكل لعبة
+    default: {}
   },
+  lastGameDate: { type: String, default: null },  // احتياطي
+
+  // ===================================
+  // ألعاب مفتوحة بالشراء
+  // ===================================
+  unlockedGames: { type: [String], default: [] },
+
+  // ===================================
+  // الاسم المخصص والديكور
+  // ===================================
+  customName: { type: String, default: null },
+  customNameApproved: { type: Boolean, default: false },
+  displayedBadge: { type: String, default: null }, // 'frame', 'gold_badge', 'streak_flame', 'royal_title'
+  ownedBadges: { type: [String], default: [] },     // ['frame', 'gold_badge']
+
+  // جلسات الألعاب (Map: gameName → data)
+  gameSessions: { type: Map, of: mongoose.Schema.Types.Mixed, default: {} },
 
   // الحالة
   isFrozen: { type: Boolean, default: false },
@@ -35,11 +47,14 @@ const userSchema = new mongoose.Schema({
   frozenAt: { type: Date, default: null },
   lastFrozenNotice: { type: Date, default: null },
 
-  // إحصائيات
-  gamesPlayed: { type: Number, default: 0 },
-  gamesWon: { type: Number, default: 0 },
+  // إحصائيات عامة
+  totalGamesPlayed: { type: Number, default: 0 },
+  totalGamesWon: { type: Number, default: 0 },
   totalQuestions: { type: Number, default: 0 },
-  dailyChallengesDone: { type: Number, default: 0 },
+  totalChallengesDone: { type: Number, default: 0 },
+
+  // إحصائيات كل لعبة (Map: gameName → {played, won})
+  gameStats: { type: Map, of: mongoose.Schema.Types.Mixed, default: {} },
 
   // الشارات
   achievements: { type: [String], default: [] },
@@ -56,7 +71,8 @@ const userSchema = new mongoose.Schema({
     extraTime: { type: Number, default: 0 },
     extraDiscount: { type: Number, default: 0 },
     extraGift: { type: Number, default: 0 },
-    freeSkip: { type: Boolean, default: false }
+    freeSkip: { type: Boolean, default: false },
+    extraQuestion: { type: Number, default: 0 }
   },
 
   // المنتجات الدائمة المشتراة
@@ -66,7 +82,6 @@ const userSchema = new mongoose.Schema({
   inventory: {
     fifty_fifty: { type: Number, default: 0 },
     skip: { type: Number, default: 0 },
-    extra_question: { type: Number, default: 0 },
     retry: { type: Number, default: 0 }
   },
 

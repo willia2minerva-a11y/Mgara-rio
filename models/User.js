@@ -17,11 +17,18 @@ const userSchema = new mongoose.Schema({
   streak: { type: Number, default: 0 },
   lastGiftDate: { type: String, default: null },
 
-  // حد اللعبة اليومية
+  // حد لعبة "اسئلة" اليومية
   lastGameDate: { type: String, default: null },
 
-  // التحدي اليومي
-  lastDailyChallenge: { type: String, default: null },
+  // التحدي اليومي (سؤال واحد صعب)
+  lastChallengeDate: { type: String, default: null },
+  challengeActive: { type: Boolean, default: false },
+  challengeQuestion: {
+    text: String,
+    options: [String],
+    correctIndex: Number,
+    sentAt: Date
+  },
 
   // الحالة
   isFrozen: { type: Boolean, default: false },
@@ -45,7 +52,7 @@ const userSchema = new mongoose.Schema({
     date: { type: Date, default: Date.now }
   }],
 
-  // ✅ الميزات الدائمة
+  // الميزات الدائمة
   permanentPerks: {
     extraTime: { type: Number, default: 0 },
     extraDiscount: { type: Number, default: 0 },
@@ -53,7 +60,7 @@ const userSchema = new mongoose.Schema({
     freeSkip: { type: Boolean, default: false }
   },
 
-  // ✅ قائمة المنتجات الدائمة المشتراة (لمنع التكرار)
+  // المنتجات الدائمة المشتراة (لمنع التكرار)
   permanentItems: { type: [String], default: [] },
 
   // المساعدات

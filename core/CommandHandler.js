@@ -1,7 +1,6 @@
 // core/CommandHandler.js
 import { today } from '../utils/helpers.js';
 
-// ✅ الأوامر المركبة
 const COMPOUND_COMMANDS = [
   'اضف_نقاط', 'خصم_نقاط', 'عدل_نقاط',
   'فك_تجميد',
@@ -14,56 +13,32 @@ const COMPOUND_COMMANDS = [
   'اضف_ريو', 'خصم_ريو'
 ];
 
-// ✅ الأوامر الفرعية (aliases)
 const ALIASES = {
-  // بدء
   'مرحبا': 'بدء', 'اهلا': 'بدء', 'هلا': 'بدء', 'هاي': 'بدء',
   'السلام عليكم': 'بدء', 'hi': 'بدء', 'hello': 'بدء', 'start': 'بدء',
-
-  // مساعدة
-  'اوامر': 'مساعدة', 'الاوامر': 'مساعدة', 'help': 'مساعدة', 'commands': 'مساعدة',
-
-  // نقاطي
-  'رصيدي': 'نقاطي', 'رصيد': 'نقاطي', 'balance': 'نقاطي',
-
-  // ملفي
-  'بروفايلي': 'ملفي', 'حسابي': 'ملفي', 'profile': 'ملفي',
-
-  // معرفي
-  'id': 'معرفي', 'myid': 'معرفي',
-
-  // توب
-  'افضل': 'توب', 'الافضل': 'توب', 'top': 'توب',
-
-  // العب
+  'اوامر': 'مساعدة', 'الاوامر': 'مساعدة', 'help': 'مساعدة',
+  'رصيدي': 'نقاطي', 'رصيد': 'نقاطي',
+  'بروفايلي': 'ملفي', 'حسابي': 'ملفي',
+  'id': 'معرفي',
+  'افضل': 'توب', 'الافضل': 'توب',
   'لعب': 'العب', 'play': 'العب',
-
-  // هدية
   'هديتي': 'هدية', 'gift': 'هدية', 'daily': 'هدية',
-
-  // سوق
-  'متجر': 'سوق', 'المتجر': 'سوق', 'shop': 'سوق', 'store': 'سوق',
-
-  // اشتر
+  'متجر': 'سوق', 'المتجر': 'سوق', 'shop': 'سوق',
   'اشتري': 'اشتر', 'شراء': 'اشتر', 'شرا': 'اشتر', 'buy': 'اشتر',
-
-  // كود
   'redeem': 'كود', 'code': 'كود',
-
-  // احالتي
   'كودي': 'احالتي', 'referral': 'احالتي',
-
-  // صديق
-  'احالة': 'صديق', 'refer': 'صديق',
-
-  // مهام
-  'المهام': 'مهام', 'missions': 'مهام', 'quests': 'مهام',
-
-  // مدير
+  'احالة': 'صديق',
+  'المهام': 'مهام', 'missions': 'مهام',
   'الادمن': 'مدير', 'admin': 'مدير',
+  'مشتريات': 'مشترياتي', 'سجلي': 'مشترياتي',
+  'العاب': 'العاب', 'games': 'العاب',
+  'اسئلة': 'العب اسئلة', 'اسئله': 'العب اسئلة'
+};
 
-  // مشترياتي
-  'مشتريات': 'مشترياتي', 'سجلي': 'مشترياتي'
+// روابط الشرح
+const LINKS = {
+  page: process.env.PAGE_LINK || 'https://facebook.com/MgaraRio',
+  group: process.env.GROUP_LINK || 'https://facebook.com/groups/MgaraRio'
 };
 
 export default class CommandHandler {
@@ -100,12 +75,11 @@ export default class CommandHandler {
       }
     }
 
-    // ✅ تحليل الأمر
     const parts = text.split(/\s+/);
     let cmd = parts[0];
     let args = parts.slice(1);
 
-    // ✅ الأمر المركب
+    // الأمر المركب
     if (parts.length >= 2) {
       const twoWord = parts.slice(0, 2).join('_');
       if (COMPOUND_COMMANDS.includes(twoWord)) {
@@ -114,7 +88,7 @@ export default class CommandHandler {
       }
     }
 
-    // ✅ تطبيق aliases
+    // Aliases
     if (ALIASES[cmd]) cmd = ALIASES[cmd];
 
     try {
@@ -128,14 +102,16 @@ export default class CommandHandler {
         case 'نقاطي': return this._balance(user);
         case 'ملفي': return this._profile(user);
         case 'توب': return await this.leaderboard.top10();
-        case 'العب': return await this._handlePlay(user);
+        case 'العاب': return this._games();
+
+        case 'العب': return await this._handlePlay(user, args);
         case 'تحدي': return await this._handleChallenge(user);
 
         case 'أ': case 'ا': case 'a': case '1':
         case 'ب': case 'b': case '2':
         case 'ج': case 'c': case '3':
         case 'د': case 'd': case '4':
-          return await this._handleGameAnswer(user, cmd);
+          return await this._handleAnswer(user, cmd);
 
         case '50': case '50:50': return await this._handleFifty(user);
         case 'تخطي': return await this._handleSkip(user);
@@ -148,7 +124,7 @@ export default class CommandHandler {
         case 'مشترياتي': return this._purchases(user);
         case 'مهام': return await this.missions.show(user);
 
-        // ===== أوامر الأدمن =====
+        // أوامر الأدمن
         case 'اضف_نقاط': case 'اضف_ريو':
           if (!this.admin.isAdmin(user)) return null;
           return await this.admin.addPoints(user, args[0], parseInt(args[1]));
@@ -194,12 +170,9 @@ export default class CommandHandler {
         case 'عدل_منتج':
           if (!this.admin.isAdmin(user)) return null;
           return (await this.shop.editItem(args[0], args[1], args.slice(2).join(' '))).message || null;
-
-        // ✅ دولاب الحظ
         case 'اضف_دولاب':
           if (!this.admin.isAdmin(user)) return null;
           return await this._handleAddWheel(user, args);
-
         case 'اضف_كود':
           if (!this.admin.isAdmin(user)) return null;
           return (await this.codes.create(args[0], parseInt(args[1]), parseInt(args[2]), user.userId)).message || null;
@@ -256,7 +229,7 @@ export default class CommandHandler {
     msg += '👤 الحساب\n';
     msg += 'معرفي • نقاطي • ملفي • توب\n\n';
     msg += '🎮 اللعب\n';
-    msg += 'العب • تحدي\n\n';
+    msg += 'العاب • العب • تحدي\n\n';
     msg += '🎁 الفعاليات\n';
     msg += 'هدية • كود • احالتي • صديق\n\n';
     msg += '🛒 السوق\n';
@@ -292,8 +265,7 @@ export default class CommandHandler {
     msg += 'حذف_منتج [الاسم]\n';
     msg += 'عدل_منتج [الاسم] [الحقل] [القيمة]\n\n';
     msg += '🎡 دولاب الحظ\n';
-    msg += 'اضف_دولاب [الاسم] [السعر] [الجوائز]\n';
-    msg += 'مثال: اضف_دولاب دولاب_ذهبي 500 600,300,تخطي_سؤال,0\n\n';
+    msg += 'اضف_دولاب [الاسم] [السعر] [الجوائز]\n\n';
     msg += '🎫 الأكواد\n';
     msg += 'اضف_كود [الكود] [الريو] [العدد]\n';
     msg += 'حذف_كود [الكود]\n\n';
@@ -304,6 +276,22 @@ export default class CommandHandler {
     msg += 'رسالة [ID] [النص]\n\n';
     msg += '💡 الأوامر تقبل _ أو مسافة';
     return msg;
+  }
+
+  _games() {
+    return `🎮 الألعاب المتاحة
+
+1️⃣ اسئلة
+   5 أسئلة متتالية
+   الجائزة: حتى 15 ريو
+   
+2️⃣ تحدي
+   سؤال واحد صعب
+   الجائزة: 3 ريو
+
+💡 للبدء:
+• العب اسئلة
+• العب تحدي`;
   }
 
   _myId(user) {
@@ -364,34 +352,75 @@ export default class CommandHandler {
   // ===================================
   // الألعاب
   // ===================================
-  async _handlePlay(user) {
-    const active = await this.game.getActiveGame(user.userId);
-    if (active) return '🎮 لديك لعبة نشطة. أجب على السؤال الحالي.';
-
-    const todayStr = today();
-    if (user.lastGameDate === todayStr) {
-      return '🎮 لعبت اليوم. عد غدًا!\n\n💡 جرب "تحدي" للسؤال اليومي';
+  async _handlePlay(user, args) {
+    // بدون اسم → عرض الألعاب
+    if (!args[0]) {
+      return this._games();
     }
 
-    user.lastGameDate = todayStr;
-    await user.save();
-    return await this.game.start(user, 'easy');
+    const gameName = args[0].trim();
+
+    // ✅ العب اسئلة
+    if (gameName === 'اسئلة' || gameName === 'اسئله') {
+      const active = await this.game.getActiveGame(user.userId);
+      if (active) return '🎮 لديك لعبة نشطة. أجب على السؤال الحالي.';
+      if (await this.game.hasActiveChallenge(user)) return '🎯 لديك تحدي نشط. أجب عليه أولًا.';
+
+      const todayStr = today();
+      if (user.lastGameDate === todayStr) {
+        return '🎮 لعبت اليوم. عد غدًا!\n\n💡 جرب "العب تحدي"';
+      }
+
+      user.lastGameDate = todayStr;
+      await user.save();
+      return await this.game.startQuiz(user, 'easy');
+    }
+
+    // ✅ العب تحدي
+    if (gameName === 'تحدي') {
+      return await this._handleChallenge(user);
+    }
+
+    return `❌ لعبة غير معروفة: ${gameName}\n\nاكتب "العاب" للعبة المتاحة`;
   }
 
   async _handleChallenge(user) {
     const todayStr = today();
-    if (user.lastDailyChallenge === todayStr) return '⏰ حللت تحدي اليوم. عد غدًا!';
+    if (user.lastChallengeDate === todayStr) {
+      return '⏰ حللت تحدي اليوم. عد غدًا!';
+    }
+
     const active = await this.game.getActiveGame(user.userId);
     if (active) return '🎮 أنهِ لعبتك الحالية أولًا.';
-    user.lastDailyChallenge = todayStr;
-    await user.save();
-    return await this.game.start(user, 'medium');
+
+    if (await this.game.hasActiveChallenge(user)) {
+      return '🎯 لديك تحدي نشط. أجب عليه.';
+    }
+
+    return await this.game.startChallenge(user);
   }
 
-  async _handleGameAnswer(user, answer) {
+  async _handleAnswer(user, answer) {
+    // فحص التحدي أولًا
+    if (await this.game.hasActiveChallenge(user)) {
+      const result = await this.game.handleChallengeAnswer(user, answer);
+      if (result.silent) return null;
+      if (result.error) return result.error;
+
+      try {
+        await this.missions.track(user, 'gamesPlayed');
+        await this.missions.check(user);
+        await this.achievements.checkRioAchievements(user);
+      } catch (e) {}
+
+      return result.message;
+    }
+
+    // لعبة عادية
     const result = await this.game.handleAnswer(user, answer);
     if (result.silent) return null;
     if (result.error) return result.error;
+
     try {
       if (user.gamesPlayed === 1 && user.referredBy) {
         await this.referral.completeReferral(user);
@@ -403,6 +432,7 @@ export default class CommandHandler {
       await this.missions.check(user);
       await this.achievements.checkRioAchievements(user);
     } catch (e) {}
+
     return result.message;
   }
 
@@ -422,29 +452,80 @@ export default class CommandHandler {
     return result.message;
   }
 
+  // ===================================
+  // ✅ الأكواد مع شرح
+  // ===================================
   async _handleCode(user, args) {
-    if (!args[0]) return null;
+    if (!args[0]) {
+      return `🎫 استرداد كود
+
+الطريقة:
+اكتب: كود [الكود]
+
+مثال:
+كود BA66A
+
+📍 من أين أجلب الأكواد؟
+تُنشر يوميًا في:
+📄 الصفحة: ${LINKS.page}
+👥 المجموعة: ${LINKS.group}`;
+    }
+
     const result = await this.codes.redeem(user, args[0]);
     if (result && result.success) return result.message;
     return null;
   }
 
+  // ===================================
+  // ✅ الإحالة مع شرح
+  // ===================================
   async _handleReferral(user, args) {
-    if (!args[0]) return null;
+    if (!args[0]) {
+      return `👥 تفعيل إحالة
+
+الطريقة:
+اكتب: صديق [كود صديقك]
+
+مثال:
+صديق M001R
+
+🎁 المكافأة:
++1 ريو لك
++1 ريو لصديقك (بعد أول لعبة)`;
+    }
+
     const result = await this.referral.useReferral(user, args[0]);
     if (result && result.success) return result.message;
     if (result && result.error && typeof result.error === 'string') return result.error;
     return null;
   }
 
+  // ===================================
+  // ✅ الشراء مع شرح
+  // ===================================
   async _handleBuy(user, args) {
-    if (!args[0]) return null;
+    if (!args[0]) {
+      return `🛒 الشراء
+
+الطريقة:
+اكتب: اشتر [اسم المنتج]
+
+مثال:
+اشتر تخطي سؤال
+اشتر 50:50
+اشتر دولاب ذهبي
+
+💡 لرؤية المنتجات: سوق`;
+    }
+
     const productName = args.join(' ');
     const result = await this.shop.purchase(user, productName);
     if (result.error) return result.error;
+
     await this.missions.track(user, 'purchases');
     await this.missions.check(user);
     await this.achievements.checkRioAchievements(user);
+
     return result.message;
   }
 
@@ -458,7 +539,12 @@ export default class CommandHandler {
   }
 
   async _handleAddProduct(admin, args) {
-    if (args.length < 4) return '❌ الاستخدام: اضف_منتج [الاسم] [السعر] [الكمية] [الوصف]';
+    if (args.length < 4) {
+      return `❌ الاستخدام: اضف_منتج [الاسم] [السعر] [الكمية] [الوصف]
+
+مثال:
+اضف منتج بطاقة_البرج 200 1 بطاقة برج مميزة`;
+    }
     const name = args[0];
     const price = parseInt(args[1]);
     const quantity = parseInt(args[2]);
@@ -468,20 +554,17 @@ export default class CommandHandler {
     return result.message || result.error;
   }
 
-  // ✅ إضافة دولاب حظ
   async _handleAddWheel(admin, args) {
     if (args.length < 3) {
       return `❌ الاستخدام: اضف_دولاب [الاسم] [السعر] [الجوائز]
 
 مثال:
-اضف_دولاب دولاب_ذهبي 500 600,300,تخطي_سؤال,0
+اضف دولاب دولاب_ذهبي 500 600,300,تخطي_سؤال,0
 
 💡 الجوائز:
 • أرقام = ريو (600 → +600 ريو)
 • 0 = لا شيء
-• أسماء = منتجات موجودة
-
-🔀 الجوائز مفصولة بفاصلة`;
+• أسماء = منتجات موجودة`;
     }
 
     const name = args[0];
@@ -493,10 +576,10 @@ export default class CommandHandler {
 
     if (prizes.length < 2) return '❌ يجب توفير جوائزين على الأقل';
 
-    // تحقق من صحة الجوائز
     for (const p of prizes) {
       if (p.type === 'item') {
-        const found = await (await import('../models/ShopItem.js')).default.findOne({ name: p.value });
+        const ShopItem = (await import('../models/ShopItem.js')).default;
+        const found = await ShopItem.findOne({ name: p.value });
         if (!found) return `❌ المنتج "${p.value.replace(/_/g, ' ')}" غير موجود في السوق`;
       }
     }

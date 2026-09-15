@@ -10,16 +10,13 @@ import GuessNumberGame from './games/GuessNumberGame.js';
 import ProverbGame from './games/ProverbGame.js';
 import TriviaGame from './games/TriviaGame.js';
 
-// ✅ تعريف كل الألعاب
 export const GAMES = {
-  // مجانية
   'حجر': {
     name: 'حجر ورقة مقص',
     icon: '🎲',
     type: 'free',
     description: '3 جولات سريعة',
     reward: 1,
-    rewardText: '1 ريو',
     GameClass: RockPaperScissorsGame
   },
   'ترتيب': {
@@ -28,7 +25,6 @@ export const GAMES = {
     type: 'free',
     description: 'رتّب الكلمة المبعثرة',
     reward: 1,
-    rewardText: '1 ريو',
     GameClass: WordScrambleGame
   },
   'اختيار': {
@@ -37,7 +33,6 @@ export const GAMES = {
     type: 'free',
     description: 'اختر الكلمة المختلفة',
     reward: 1,
-    rewardText: '1 ريو',
     GameClass: OddOneOutGame
   },
   'اسئلة': {
@@ -46,11 +41,8 @@ export const GAMES = {
     type: 'free',
     description: '5 أسئلة متتالية',
     reward: 8,
-    rewardText: 'حتى 8 ريو',
-    GameClass: null  // يُدار من MillionaireGame
+    GameClass: null
   },
-
-  // بالمستوى
   'سرعة': {
     name: 'سرعة البديهة',
     icon: '⚡',
@@ -58,7 +50,6 @@ export const GAMES = {
     levelReq: 6,
     description: 'حل الحساب بسرعة',
     reward: 3,
-    rewardText: '3 ريو',
     GameClass: MathGame
   },
   'صح': {
@@ -68,7 +59,6 @@ export const GAMES = {
     levelReq: 12,
     description: 'معلومات سريعة',
     reward: 3,
-    rewardText: '3 ريو',
     GameClass: TrueFalseGame
   },
   'تخمين': {
@@ -78,11 +68,8 @@ export const GAMES = {
     levelReq: 20,
     description: 'خمّن الرقم الصحيح',
     reward: 2,
-    rewardText: '2 ريو',
     GameClass: GuessNumberGame
   },
-
-  // بالشراء
   'كلمة': {
     name: 'الكلمة المخفية',
     icon: '🧩',
@@ -90,7 +77,6 @@ export const GAMES = {
     price: 150,
     description: 'اكتشف الحروف المخفية',
     reward: 2,
-    rewardText: '2 ريو',
     GameClass: HangmanGame
   },
   'مثل': {
@@ -100,7 +86,6 @@ export const GAMES = {
     price: 200,
     description: 'أكمل المثل الشهير',
     reward: 1,
-    rewardText: '1 ريو',
     GameClass: ProverbGame
   },
   'معلومات': {
@@ -110,7 +95,6 @@ export const GAMES = {
     price: 250,
     description: 'أسئلة ثقافية',
     reward: 2,
-    rewardText: '2 ريو',
     GameClass: TriviaGame
   }
 };
@@ -125,37 +109,50 @@ export default class GameSystem {
   }
 
   // ===================================
-  // عرض قائمة الألعاب
+  // ✅ قائمة الألعاب المبسطة
   // ===================================
-  listGames(user, detailed = false) {
-    if (!detailed) {
-      return `🎮 الألعاب
+  listGames(user) {
+    const available = [];
+    const locked = [];
 
-✅ حجر • ترتيب • اختيار • اسئلة
-🔒 سرعة • صح-خطأ • تخمين
-🔑 كلمة • مثل • معلومات
+    for (const [key, game] of Object.entries(GAMES)) {
+      let isAvailable = true;
+      let lockReason = '';
 
-💡 العب [اسم اللعبة]`;
+      if (game.type === 'level' && user.level < game.levelReq) {
+        isAvailable = false;
+        lockReason = `تحتاج Lv.${game.levelReq}`;
+      } else if (game.type === 'purchase' && !user.unlockedGames?.includes(key)) {
+        isAvailable = false;
+        lockReason = 'تُشترى من السوق';
+      }
+
+      const displayName = `${game.icon} ${game.name}`;
+
+      if (isAvailable) {
+        available.push(`• ${displayName}`);
+      } else {
+        locked.push(`• ${displayName} — ${lockReason}`);
+      }
     }
 
     let msg = '🎮 الألعاب\n\n';
-    msg += '✅ متاحة:\n';
-    msg += '🎲 حجر ورقة مقص — 1 ريو\n';
-    msg += '🔤 ترتيب الحروف — 1 ريو\n';
-    msg += '🎯 الاختيار الصعب — 1 ريو\n';
-    msg += '📚 اسئلة (5 أسئلة) — 8 ريو\n\n';
 
-    msg += '🔒 بالمستوى:\n';
-    msg += '⚡ سرعة البديهة (Lv.6) — 3 ريو\n';
-    msg += '🧠 صح أم خطأ (Lv.12) — 3 ريو\n';
-    msg += '🎲 تخمين الرقم (Lv.20) — 2 ريو\n\n';
+    msg += '✅ متاحة الآن:\n';
+    if (available.length === 0) {
+      msg += '(لا توجد)\n';
+    } else {
+      msg += available.join('\n') + '\n';
+    }
 
-    msg += '🔑 بالشراء:\n';
-    msg += '🧩 الكلمة المخفية — 2 ريو\n';
-    msg += '🔗 أكمل المثل — 1 ريو\n';
-    msg += '📖 معلومات عامة — 2 ريو\n\n';
+    msg += '\n🔒 غير متاحة:\n';
+    if (locked.length === 0) {
+      msg += '(لا توجد)\n';
+    } else {
+      msg += locked.join('\n') + '\n';
+    }
 
-    msg += '💡 العب [اسم اللعبة]';
+    msg += '\n💡 العب [اسم اللعبة]';
     return msg;
   }
 
@@ -166,20 +163,16 @@ export default class GameSystem {
     const game = GAMES[gameKey];
     if (!game) return { error: '❌ لعبة غير معروفة' };
 
-    // فحص التجميد
     if (user.isFrozen) return { error: '❄️ حسابك مجمد' };
 
-    // فحص المستوى
     if (game.type === 'level' && user.level < game.levelReq) {
       return { error: `🔒 تحتاج المستوى ${game.levelReq}\n\nمستواك: ${user.level}` };
     }
 
-    // فحص الشراء
     if (game.type === 'purchase' && !user.unlockedGames?.includes(gameKey)) {
       return { error: `🔑 تحتاج شراء هذه اللعبة\n\nالسعر: ${game.price} ريو\n\nاكتب: سوق` };
     }
 
-    // فحص اللعب اليومي
     const todayStr = today();
     const played = user.gamesPlayedToday?.get?.(gameKey) || user.gamesPlayedToday?.[gameKey];
     if (played === todayStr) {
@@ -198,11 +191,9 @@ export default class GameSystem {
 
     const game = check.game;
 
-    // تسجيل اللعب
     if (!user.gamesPlayedToday) user.gamesPlayedToday = new Map();
     user.gamesPlayedToday.set(gameKey, today());
 
-    // إحصائيات
     if (!user.gameStats) user.gameStats = new Map();
     const stats = user.gameStats.get(gameKey) || { played: 0, won: 0 };
     stats.played += 1;
@@ -210,12 +201,10 @@ export default class GameSystem {
 
     await user.save();
 
-    // اسئلة لها نظام خاص
     if (gameKey === 'اسئلة') {
       return await this.millionaire.startQuiz(user, 'easy');
     }
 
-    // باقي الألعاب
     const GameClass = game.GameClass;
     const gameInstance = new GameClass(this.points, this.achievements);
     const session = await gameInstance.start(user);
@@ -236,7 +225,6 @@ export default class GameSystem {
     const game = GAMES[gameKey];
     if (!game) return { silent: true };
 
-    // اسئلة
     if (gameKey === 'اسئلة') {
       return await this.millionaire.handleAnswer(user, answer);
     }
@@ -251,30 +239,26 @@ export default class GameSystem {
     if (result.silent) return { silent: true };
     if (result.error) return result.error;
 
-    // تحديث الجلسة
     if (result.sessionData) {
       user.gameSessions.set(gameKey, result.sessionData);
     } else {
       user.gameSessions.delete(gameKey);
     }
 
-    // مكافآت
     if (result.reward && result.reward > 0) {
       await this.points.addRio(user, result.reward);
     }
 
-    // إحصائيات الفوز
     if (result.won) {
       const stats = user.gameStats.get(gameKey) || { played: 0, won: 0 };
       stats.won += 1;
       user.gameStats.set(gameKey, stats);
-      user.totalGamesWon += 1;
+      user.totalGamesWon = (user.totalGamesWon || 0) + 1;
     }
 
-    user.totalGamesPlayed += 1;
+    user.totalGamesPlayed = (user.totalGamesPlayed || 0) + 1;
     await user.save();
 
-    // المهام
     try {
       await this.missions.track(user, 'gamesPlayed');
       if (result.won) await this.missions.track(user, 'gamesWon');
@@ -285,14 +269,10 @@ export default class GameSystem {
     return { message: result.message };
   }
 
-  // ===================================
-  // هل لدى اللاعب لعبة نشطة؟
-  // ===================================
   async hasActiveGame(user) {
     const sessions = user.gameSessions;
     if (!sessions || sessions.size === 0) return false;
 
-    // فحص جلسات قديمة (> 5 دقائق)
     const now = Date.now();
     for (const [key, session] of sessions.entries()) {
       if (session?.startedAt && (now - session.startedAt) > 5 * 60 * 1000) {
@@ -307,4 +287,4 @@ export default class GameSystem {
     if (!user.gameSessions || user.gameSessions.size === 0) return null;
     return Array.from(user.gameSessions.keys())[0];
   }
-}
+  }

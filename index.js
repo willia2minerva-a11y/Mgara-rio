@@ -14,6 +14,7 @@ import UserSystem from './systems/UserSystem.js';
 import PointsSystem from './systems/PointsSystem.js';
 import DailyGiftSystem from './systems/DailyGiftSystem.js';
 import MillionaireGame from './systems/MillionaireGame.js';
+import GameSystem from './systems/GameSystem.js';
 import ShopSystem from './systems/ShopSystem.js';
 import CodeSystem from './systems/CodeSystem.js';
 import ReferralSystem from './systems/ReferralSystem.js';
@@ -90,13 +91,14 @@ function initSystems() {
   const achievementSystem = new AchievementSystem(pointsSystem);
   const dailyGift = new DailyGiftSystem(pointsSystem, achievementSystem);
   const gemini = new GeminiClient();
-  const game = new MillionaireGame(pointsSystem, achievementSystem, gemini);
+  const millionaireGame = new MillionaireGame(pointsSystem, achievementSystem, gemini);
   const shop = new ShopSystem(pointsSystem, achievementSystem);
   const codes = new CodeSystem(pointsSystem);
   const referral = new ReferralSystem(pointsSystem, achievementSystem);
   const missions = new WeeklyMissions(pointsSystem);
   const leaderboard = new LeaderboardSystem();
   const adminSystem = new AdminSystem({ userSystem, pointsSystem, shopSystem: shop, codeSystem: codes });
+  const gameSystem = new GameSystem(pointsSystem, achievementSystem, missions, millionaireGame);
 
   const systems = {
     userSystem,
@@ -104,7 +106,8 @@ function initSystems() {
     achievementSystem,
     dailyGift,
     gemini,
-    game,
+    game: millionaireGame,
+    gameSystem,
     shop,
     codes,
     referral,

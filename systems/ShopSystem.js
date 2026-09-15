@@ -3,32 +3,40 @@ import ShopItem from '../models/ShopItem.js';
 import { getLevelBonus } from '../utils/helpers.js';
 
 const DEFAULT_ITEMS = [
-  // مساعدات
-  { name: '50:50', price: 1, description: 'يحذف إجابتين خاطئتين', category: 'help', effect: 'fifty_fifty', value: 1 },
-  { name: 'تخطي_سؤال', price: 2, description: 'ينتقل لسؤال جديد', category: 'help', effect: 'skip', value: 1 },
-  { name: 'إعادة_محاولة', price: 3, description: 'جولة ثانية', category: 'help', effect: 'retry', value: 1 },
+  // ===================================
+  // 🎫 مساعدات
+  // ===================================
+  { name: '50:50', price: 1, quantity: -1, description: 'يحذف إجابتين خاطئتين', category: 'help', effect: 'fifty_fifty', value: 1 },
+  { name: 'تخطي_سؤال', price: 2, quantity: -1, description: 'ينتقل لسؤال جديد', category: 'help', effect: 'skip', value: 1 },
+  { name: 'إعادة_محاولة', price: 3, quantity: -1, description: 'جولة ثانية', category: 'help', effect: 'retry', value: 1 },
 
-  // مفاتيح الألعاب
-  { name: 'مفتاح_الكلمة', price: 150, description: 'يفتح لعبة الكلمة المخفية', category: 'game_unlock', effect: 'unlock_kلمة', value: 1 },
-  { name: 'مفتاح_المثل', price: 200, description: 'يفتح لعبة أكمل المثل', category: 'game_unlock', effect: 'unlock_مثل', value: 1 },
-  { name: 'مفتاح_معلومات', price: 250, description: 'يفتح لعبة معلومات عامة', category: 'game_unlock', effect: 'unlock_معلومات', value: 1 },
+  // ===================================
+  // 🎮 مفاتيح الألعاب
+  // ===================================
+  { name: 'مفتاح_الكلمة', price: 150, quantity: -1, description: 'يفتح لعبة الكلمة المخفية', category: 'game_unlock', effect: 'unlock_كلمة', value: 1 },
+  { name: 'مفتاح_المثل', price: 200, quantity: -1, description: 'يفتح لعبة أكمل المثل', category: 'game_unlock', effect: 'unlock_مثل', value: 1 },
+  { name: 'مفتاح_معلومات', price: 250, quantity: -1, description: 'يفتح لعبة معلومات عامة', category: 'game_unlock', effect: 'unlock_معلومات', value: 1 },
 
-  // هوية
-  { name: 'اسم_مخصص', price: 80, description: 'اسمك في التوب', category: 'identity', effect: 'custom_name', value: 1 },
-  { name: 'إطار_ملف', price: 100, description: 'إطار 🌟 بجانب اسمك', category: 'identity', effect: 'badge_frame', value: 1 },
-  { name: 'شارة_ذهبية', price: 150, description: 'شارة 🎖️ بجانب اسمك', category: 'identity', effect: 'badge_gold', value: 1 },
-  { name: 'شعلة_streak', price: 250, description: 'شعلة 🔥 بجانب اسمك', category: 'identity', effect: 'badge_flame', value: 1 },
-  { name: 'لقب_ملكي', price: 400, description: 'لقب 👑 بجانب اسمك', category: 'identity', effect: 'badge_royal', value: 1 },
+  // ===================================
+  // 🏅 الهوية
+  // ===================================
+  { name: 'اسم_مخصص', price: 80, quantity: -1, description: 'اسمك في التوب', category: 'identity', effect: 'custom_name', value: 1 },
+  { name: 'إطار_ملف', price: 100, quantity: -1, description: 'إطار 🌟 بجانب اسمك', category: 'identity', effect: 'badge_frame', value: 1 },
+  { name: 'شارة_ذهبية', price: 150, quantity: -1, description: 'شارة 🎖️ بجانب اسمك', category: 'identity', effect: 'badge_gold', value: 1 },
+  { name: 'شعلة_streak', price: 250, quantity: -1, description: 'شعلة 🔥 بجانب اسمك', category: 'identity', effect: 'badge_flame', value: 1 },
+  { name: 'لقب_ملكي', price: 400, quantity: -1, description: 'لقب 👑 بجانب اسمك', category: 'identity', effect: 'badge_royal', value: 1 },
 
-  // ميزات دائمة
-  { name: 'سؤال_إضافي', price: 20, description: 'سؤال 6 في لعبة اسئلة', category: 'permanent', effect: 'extra_question', value: 1 },
-  { name: '+2_ثواني_دائم', price: 80, description: 'زيادة دائمة للوقت', category: 'permanent', effect: 'extra_time', value: 2 },
-  { name: 'خصم_5%', price: 120, description: 'خصم إضافي دائم', category: 'permanent', effect: 'extra_discount', value: 5 },
-  { name: 'هدية_+1', price: 200, description: 'هدية يومية إضافية', category: 'permanent', effect: 'extra_gift', value: 1 },
-  { name: 'تخطي_مجاني', price: 300, description: 'تخطي مجاني يوميًا', category: 'permanent', effect: 'free_skip', value: 1 }
+  // ===================================
+  // 💎 ميزات دائمة
+  // ===================================
+  { name: 'سؤال_إضافي', price: 20, quantity: -1, description: 'سؤال 6 في لعبة اسئلة', category: 'permanent', effect: 'extra_question', value: 1 },
+  { name: '+2_ثواني_دائم', price: 80, quantity: -1, description: 'زيادة دائمة للوقت', category: 'permanent', effect: 'extra_time', value: 2 },
+  { name: 'خصم_5%', price: 120, quantity: -1, description: 'خصم إضافي دائم', category: 'permanent', effect: 'extra_discount', value: 5 },
+  { name: 'هدية_+1', price: 200, quantity: -1, description: 'هدية يومية إضافية', category: 'permanent', effect: 'extra_gift', value: 1 },
+  { name: 'تخطي_مجاني', price: 300, quantity: -1, description: 'تخطي مجاني يوميًا', category: 'permanent', effect: 'free_skip', value: 1 }
 ];
 
-// عرض الأيقونات للديكورات
+// أيقونات الديكورات
 const BADGE_ICONS = {
   badge_frame: '🌟',
   badge_gold: '🎖️',
@@ -44,12 +52,32 @@ export default class ShopSystem {
     console.log('🛒 ShopSystem جاهز');
   }
 
+  // ===================================
+  // ✅ تهيئة ذكية — تضيف/تحدّث المنتجات المفقودة
+  // ===================================
   async initialize() {
-    const count = await ShopItem.countDocuments();
-    if (count === 0) {
-      await ShopItem.insertMany(DEFAULT_ITEMS);
-      console.log('✅ تم تحميل المنتجات الافتراضية');
+    let added = 0;
+    let updated = 0;
+
+    for (const item of DEFAULT_ITEMS) {
+      const exists = await ShopItem.findOne({ name: item.name });
+
+      if (!exists) {
+        await ShopItem.create(item);
+        added++;
+      } else if (exists.category !== item.category) {
+        // تحديث المنتجات القديمة لفئة جديدة
+        exists.category = item.category;
+        exists.description = item.description;
+        exists.price = item.price;
+        await exists.save();
+        updated++;
+      }
     }
+
+    if (added > 0) console.log(`✅ أُضيف ${added} منتج جديد`);
+    if (updated > 0) console.log(`🔄 حُدّث ${updated} منتج`);
+    if (added === 0 && updated === 0) console.log('ℹ️ كل المنتجات موجودة');
   }
 
   // ===================================
@@ -68,7 +96,10 @@ export default class ShopSystem {
     items = items.filter(i => {
       if (i.category === 'permanent' && ownedPermanent.includes(i.name)) return false;
       if (i.category === 'identity' && ownedBadges.includes(i.name)) return false;
-      if (i.category === 'game_unlock' && unlockedGames.includes(i.name.replace('مفتاح_', ''))) return false;
+      if (i.category === 'game_unlock') {
+        const gameKey = i.name.replace('مفتاح_', '');
+        if (unlockedGames.includes(gameKey)) return false;
+      }
       return true;
     });
 
@@ -132,6 +163,7 @@ export default class ShopSystem {
       return { error: '❌ المنتج نفد!' };
     }
 
+    // السعر
     const levelBonus = getLevelBonus(user.level);
     const shopDiscount = user.permanentPerks?.extraDiscount || 0;
     const totalDiscount = Math.min(50, levelBonus.discount + shopDiscount);
@@ -149,6 +181,7 @@ export default class ShopSystem {
       await item.save();
     }
 
+    // دولاب حظ
     if (item.category === 'wheel') {
       return await this._spinWheel(user, item, finalPrice);
     }
@@ -169,13 +202,29 @@ export default class ShopSystem {
     if (totalDiscount > 0) msg += ` (خصم ${totalDiscount}%)`;
     msg += `\n💳 رصيدك: ${user.rio} ريو`;
 
-    if (this.contactLink && item.category === 'external') {
+    // رسائل خاصة حسب النوع
+    if (item.category === 'external' && this.contactLink) {
       msg += `\n\n📞 للتواصل مع الإدارة:\n${this.contactLink}`;
+    }
+
+    if (item.category === 'identity' && item.effect === 'custom_name') {
+      msg += `\n\n💡 لتعيين اسمك: اسمي [الاسم]`;
+    }
+
+    if (item.category === 'identity' && item.effect.startsWith('badge_')) {
+      msg += `\n\n💡 لتفعيل الديكور: ديكوري ${displayName}`;
+    }
+
+    if (item.category === 'game_unlock') {
+      msg += `\n\n🎮 اللعبة متاحة الآن!\n💡 اكتب: العاب`;
     }
 
     return { success: true, message: msg };
   }
 
+  // ===================================
+  // دولاب الحظ
+  // ===================================
   async _spinWheel(user, item, paidPrice) {
     if (!item.wheelPrizes || item.wheelPrizes.length === 0) {
       return { error: '❌ الدولاب غير مكتمل' };
@@ -194,8 +243,13 @@ export default class ShopSystem {
     } else if (prize.type === 'item') {
       const found = await ShopItem.findOne({ name: prize.value, active: true });
       if (found) {
-        await this._applyEffect(user, found);
-        resultText = found.name.replace(/_/g, ' ');
+        // فحص إذا كان دائم ومملوك
+        if (found.category === 'permanent' && user.permanentItems?.includes(found.name)) {
+          resultText = 'لا شيء';
+        } else {
+          await this._applyEffect(user, found);
+          resultText = found.name.replace(/_/g, ' ');
+        }
       } else {
         resultText = 'لا شيء';
       }
@@ -206,40 +260,55 @@ export default class ShopSystem {
     user.purchases.push({ item: item.name, price: paidPrice });
     await user.save();
 
+    if (user.purchases.length === 1) await this.achievements.unlock(user, 'first_purchase');
+
     return {
       success: true,
       message: `🎡 ${item.name.replace(/_/g, ' ')}\n\n💰 السعر: ${paidPrice} ريو\n💳 رصيدك: ${user.rio} ريو\n\n🎁 لقد فزت بـ : ${resultText} 🎉🎊`
     };
   }
 
+  // ===================================
+  // تطبيق التأثير
+  // ===================================
   async _applyEffect(user, item) {
     switch (item.effect) {
+      // مساعدات
       case 'fifty_fifty': user.inventory.fifty_fifty += (item.value || 1); break;
       case 'skip': user.inventory.skip += (item.value || 1); break;
       case 'retry': user.inventory.retry += (item.value || 1); break;
 
+      // ميزات دائمة
       case 'extra_time': user.permanentPerks.extraTime += (item.value || 2); break;
       case 'extra_discount': user.permanentPerks.extraDiscount += (item.value || 5); break;
       case 'extra_gift': user.permanentPerks.extraGift += (item.value || 1); break;
       case 'free_skip': user.permanentPerks.freeSkip = true; break;
       case 'extra_question': user.permanentPerks.extraQuestion += (item.value || 1); break;
 
+      // اسم مخصص
       case 'custom_name':
-        // يفتح له إمكانية تعيين اسم
-        user.customName = user.customName || null;
-        user.customNameApproved = false;
         user.ownedBadges = user.ownedBadges || [];
-        user.ownedBadges.push('اسم_مخصص');
+        if (!user.ownedBadges.includes('اسم_مخصص')) {
+          user.ownedBadges.push('اسم_مخصص');
+        }
         break;
+
+      // ديكورات
       case 'badge_frame':
       case 'badge_gold':
       case 'badge_flame':
       case 'badge_royal':
         user.ownedBadges = user.ownedBadges || [];
-        user.ownedBadges.push(item.name);
-        if (!user.displayedBadge) user.displayedBadge = item.effect;
+        if (!user.ownedBadges.includes(item.name)) {
+          user.ownedBadges.push(item.name);
+        }
+        // تفعيل تلقائي إذا لم يكن هناك ديكور مفعّل
+        if (!user.displayedBadge) {
+          user.displayedBadge = item.name;
+        }
         break;
 
+      // مفاتيح الألعاب
       case 'unlock_كلمة':
         user.unlockedGames = user.unlockedGames || [];
         if (!user.unlockedGames.includes('كلمة')) user.unlockedGames.push('كلمة');
@@ -255,6 +324,9 @@ export default class ShopSystem {
     }
   }
 
+  // ===================================
+  // إدارة المنتجات (أدمن)
+  // ===================================
   async addItem(name, price, quantity, description, category = 'external', wheelPrizes = null) {
     const normalized = name.trim().replace(/\s+/g, '_');
     const exists = await ShopItem.findOne({ name: normalized });
@@ -266,7 +338,8 @@ export default class ShopSystem {
       quantity: quantity === -1 ? -1 : quantity,
       description: description || '',
       category,
-      wheelPrizes
+      wheelPrizes,
+      active: true
     });
 
     let msg = `✅ تم إضافة: ${name.replace(/_/g, ' ')}`;
@@ -304,11 +377,14 @@ export default class ShopSystem {
     items.forEach(i => {
       const stock = i.quantity === -1 ? '∞' : i.quantity;
       const displayName = i.name.replace(/_/g, ' ');
-      msg += `• ${displayName} — ${i.price} ريو (${stock})\n`;
+      msg += `• ${displayName} — ${i.price} ريو (${stock}) [${i.category}]\n`;
     });
     return msg;
   }
 
+  // ===================================
+  // أدوات مساعدة
+  // ===================================
   parsePrizes(text) {
     const cleaned = text.replace(/[\[\]]/g, '').trim();
     const parts = cleaned.split(',').map(p => p.trim()).filter(Boolean);
@@ -321,8 +397,7 @@ export default class ShopSystem {
     });
   }
 
-  // ✅ الحصول على أيقونة الديكور
   getBadgeIcon(effect) {
     return BADGE_ICONS[effect] || '';
   }
-      }
+                                }

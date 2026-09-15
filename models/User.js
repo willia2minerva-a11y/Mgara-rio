@@ -20,13 +20,12 @@ const userSchema = new mongoose.Schema({
   // حد لعبة "اسئلة" اليومية
   lastGameDate: { type: String, default: null },
 
-  // التحدي اليومي (سؤال واحد صعب)
+  // التحدي اليومي (سؤال واحد صعب - بدون خيارات)
   lastChallengeDate: { type: String, default: null },
   challengeActive: { type: Boolean, default: false },
   challengeQuestion: {
     text: String,
-    options: [String],
-    correctIndex: Number,
+    answer: String,     // ✅ الإجابة النصية (بدون خيارات)
     sentAt: Date
   },
 
@@ -60,7 +59,7 @@ const userSchema = new mongoose.Schema({
     freeSkip: { type: Boolean, default: false }
   },
 
-  // المنتجات الدائمة المشتراة (لمنع التكرار)
+  // المنتجات الدائمة المشتراة
   permanentItems: { type: [String], default: [] },
 
   // المساعدات

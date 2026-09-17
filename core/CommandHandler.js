@@ -2,16 +2,18 @@
 import { today, normalizeArabic } from '../utils/helpers.js';
 
 const COMPOUND_COMMANDS = [
-  'اضف_نقاط', 'خصم_نقاط', 'عدل_نقاط',
+  'اضف_نقاط', 'اضف_ريو',
+  'خصم_نقاط', 'خصم_ريو',
+  'عدل_نقاط',
   'فك_تجميد',
   'عرض_لاعب', 'عرض_اللاعبين', 'عرض_المجمدين',
   'عرض_الاكواد', 'عرض_المنتجات',
   'اضف_منتج', 'حذف_منتج', 'عدل_منتج',
   'اضف_كود', 'حذف_كود',
   'اضف_دولاب', 'حذف_دولاب',
-  'اعطي_ادمن', 'ازل_ادمن',
-  'اضف_ريو', 'خصم_ريو',
-  'ايقاف_البوت', 'تشغيل_البوت'
+  'منح_ادمن', 'منح_ادمن_رئيسي', 'ازل_ادمن',
+  'ايقاف_البوت', 'تشغيل_البوت',
+  'حذف_الكل'
 ];
 
 const ALIASES = {
@@ -26,9 +28,6 @@ const ALIASES = {
   // أقسام
   'حساب': 'قسم_الحساب', 'الحساب': 'قسم_الحساب',
 
-  // السوق
-  'متجر': 'سوق', 'المتجر': 'سوق', 'shop': 'سوق',
-
   // الحساب
   'رصيدي': 'نقاطي', 'رصيد': 'نقاطي',
   'بروفايلي': 'ملفي', 'حسابي': 'ملفي',
@@ -41,19 +40,36 @@ const ALIASES = {
   'كودي': 'احالتي', 'referral': 'احالتي',
   'احالة': 'صديق',
 
+  // السوق
+  'متجر': 'سوق', 'المتجر': 'سوق', 'shop': 'سوق',
+  'اشتري': 'اشتر', 'شراء': 'اشتر', 'شرا': 'اشتر', 'buy': 'اشتر',
+  'مشتريات': 'مشترياتي', 'سجلي': 'مشترياتي',
+
   // المهام
   'المهام': 'مهام', 'missions': 'مهام',
 
   // الإدارة
   'الادمن': 'مدير', 'admin': 'مدير',
+
+  // أوامر إيقاف
   'ايقاف': 'ايقاف_البوت', 'وقف': 'ايقاف_البوت',
   'استئناف': 'تشغيل_البوت', 'استمرار': 'تشغيل_البوت',
 
-  // المشتريات
-  'مشتريات': 'مشترياتي', 'سجلي': 'مشترياتي',
+  // أوامر النقاط
+  'اضف': 'اضف_نقاط', 'اضافة': 'اضف_نقاط', 'اضافه': 'اضف_نقاط',
+  'اعطي': 'اضف_نقاط', 'منح_نقاط': 'اضف_نقاط',
+  'خصم': 'خصم_نقاط', 'اطرح': 'خصم_نقاط', 'ازالة_نقاط': 'خصم_نقاط',
 
-  // الألعاب
-  'العاب': 'العاب', 'games': 'العاب'
+  // حالة
+  'معلومات': 'حالة', 'تفاصيل': 'حالة', 'info': 'حالة',
+
+  // صلاحيات
+  'منح': 'منح_ادمن', 'ترقية': 'منح_ادمن',
+  'منح_رئيسي': 'منح_ادمن_رئيسي', 'ترقية_رئيسية': 'منح_ادمن_رئيسي',
+  'ازالة_ادمن': 'ازل_ادمن', 'تنزيل': 'ازل_ادمن',
+
+  // حذف الكل
+  'تصفير': 'حذف_الكل', 'reset': 'حذف_الكل'
 };
 
 const LINKS = {
@@ -83,6 +99,7 @@ export default class CommandHandler {
     this.missions = systems.missions;
     this.leaderboard = systems.leaderboard;
     this.admin = systems.adminSystem;
+    this.archive = systems.archiveSystem;
     console.log('🎯 CommandHandler جاهز');
   }
 
@@ -94,6 +111,7 @@ export default class CommandHandler {
     let cmd = parts[0];
     let args = parts.slice(1);
 
+    // ✅ الأوامر المركبة
     if (parts.length >= 2) {
       const twoWord = parts.slice(0, 2).join('_');
       if (COMPOUND_COMMANDS.includes(twoWord)) {
@@ -102,39 +120,67 @@ export default class CommandHandler {
       }
     }
 
+    // ✅ Aliases
     if (ALIASES[cmd]) cmd = ALIASES[cmd];
 
     // ===================================
-    // ✅ أوامر البوت الحساسة (قبل فحص الإيقاف)
+    // ✅ أوامر البوت الحساسة (قبل كل شيء)
     // ===================================
-    if (['ايقاف_البوت', 'تشغيل_البوت'].includes(cmd)) {
+    if (['ايقاف_البوت', 'تشغيل_البوت', 'حذف_الكل'].includes(cmd)) {
       const admin = await this.userSystem.getOrCreate(sender.id, sender.platform);
-      if (!this.admin.isAdmin(admin)) return null;
+      if (!this.admin.isMainAdmin(admin)) return null;
 
       if (cmd === 'ايقاف_البوت') {
         this.userSystem.setBotPaused(true);
         return '⏸️ تم إيقاف البوت\n\n💡 التسجيل الجديد ما زال يعمل';
-      } else {
+      }
+
+      if (cmd === 'تشغيل_البوت') {
         this.userSystem.setBotPaused(false);
         return '▶️ تم تشغيل البوت';
+      }
+
+      if (cmd === 'حذف_الكل') {
+        if (args[0] !== 'تأكيد') {
+          return `⚠️ تأكيد الحذف
+
+سيتم حذف جميع اللاعبين نهائيًا!
+
+💡 للتأكيد: حذف_الكل تأكيد
+
+⚠️ لا يمكن التراجع!`;
+        }
+
+        const User = (await import('../models/User.js')).default;
+        const count = await User.countDocuments();
+        await User.deleteMany({});
+
+        // حذف الأرشفة أيضًا
+        try {
+          const Archive = (await import('../models/Archive.js')).default;
+          await Archive.deleteMany({});
+        } catch (e) {}
+
+        return `🗑️ تم حذف ${count} لاعب\n\n💡 ابدأ من جديد — أول لاعب = R_000`;
       }
     }
 
     // ===================================
-    // ✅ فحص إيقاف البوت
+    // ✅ فحص الإيقاف
     // ===================================
     const paused = this.userSystem.isBotPaused();
-
     const user = await this.userSystem.getOrCreate(sender.id, sender.platform);
 
     if (paused) {
-      const allowedWhenPaused = ['بدء', 'مساعدة', 'معرفي'];
-      if (!allowedWhenPaused.includes(cmd)) {
+      const allowed = ['بدء', 'مساعدة', 'معرفي'];
+      if (!allowed.includes(cmd)) {
         return null;
       }
     }
 
+    // ===================================
     // ✅ التجميد
+    // ===================================
     if (user.isFrozen) {
       const allowed = ['نقاطي', 'ملفي', 'مساعدة', 'توب', 'معرفي'];
       const firstWord = parts[0];
@@ -161,8 +207,8 @@ export default class CommandHandler {
         case 'قسم_الحساب': return this._sectionAccount();
 
         case 'مدير':
-          if (!this.admin.isAdmin(user)) return null;
-          return this._adminHelp();
+          if (!this.admin.isAnyAdmin(user)) return null;
+          return this._adminHelp(user);
 
         case 'معرفي': return this._myId(user);
         case 'نقاطي': return this._balance(user);
@@ -204,97 +250,126 @@ export default class CommandHandler {
         case 'ديكوري':
           return await this._handleSetBadge(user, args);
 
-        // ===== أوامر الأدمن =====
+        // ===================================
+        // 👑 أوامر الأدمن
+        // ===================================
+
+        // ✅ إضافة نقاط (كل الأدمن)
         case 'اضف_نقاط': case 'اضف_ريو':
-          if (!this.admin.isAdmin(user)) return null;
-          return await this.admin.addPoints(user, args[0], parseInt(args[1]));
+          if (!this.admin.isAnyAdmin(user)) return null;
+          return await this.admin.addPoints(user, args);
 
+        // ✅ خصم نقاط (أدمن رئيسي فقط)
         case 'خصم_نقاط': case 'خصم_ريو':
-          if (!this.admin.isAdmin(user)) return null;
-          return await this.admin.removePoints(user, args[0], parseInt(args[1]));
+          if (!this.admin.isMainAdmin(user)) return null;
+          return await this.admin.removePoints(user, args);
 
-        case 'عدل_نقاط':
-          if (!this.admin.isAdmin(user)) return null;
-          return await this.admin.setPoints(user, args[0], parseInt(args[1]));
+        // ✅ حالة لاعب
+        case 'حالة':
+          if (!this.admin.isAnyAdmin(user)) return null;
+          return await this.admin.showPlayer(args[0]);
 
+        // ✅ تجميد
         case 'تجميد':
-          if (!this.admin.isAdmin(user)) return null;
-          return await this.admin.freeze(user, args[0]);
+          if (!this.admin.isMainAdmin(user)) return null;
+          return await this.admin.freeze(user, args);
 
         case 'فك_تجميد':
-          if (!this.admin.isAdmin(user)) return null;
-          return await this.admin.unfreeze(user, args[0]);
+          if (!this.admin.isMainAdmin(user)) return null;
+          return await this.admin.unfreeze(user, args);
 
         case 'حذف':
-          if (!this.admin.isAdmin(user)) return null;
-          return await this.admin.deleteUser(user, args[0]);
+          if (!this.admin.isMainAdmin(user)) return null;
+          return await this.admin.deleteUser(user, args);
 
+        // ✅ عرض
         case 'عرض_لاعب':
-          if (!this.admin.isAdmin(user)) return null;
+          if (!this.admin.isAnyAdmin(user)) return null;
           return await this.admin.showPlayer(args[0]);
 
         case 'عرض_اللاعبين':
-          if (!this.admin.isAdmin(user)) return null;
-          return await this.admin.listPlayers(parseInt(args[0]) || 1);
+          if (!this.admin.isAnyAdmin(user)) return null;
+          return await this.admin.listPlayers(user, args);
 
         case 'عرض_المجمدين':
-          if (!this.admin.isAdmin(user)) return null;
-          return await this.admin.listFrozen();
+          if (!this.admin.isAnyAdmin(user)) return null;
+          return await this.admin.listFrozen(user);
 
         case 'عرض_الاكواد':
-          if (!this.admin.isAdmin(user)) return null;
+          if (!this.admin.isAnyAdmin(user)) return null;
           return await this.codes.listAll();
 
         case 'عرض_المنتجات':
-          if (!this.admin.isAdmin(user)) return null;
+          if (!this.admin.isAnyAdmin(user)) return null;
           return await this.shop.listAll();
 
         case 'احصائيات':
-          if (!this.admin.isAdmin(user)) return null;
-          return await this.admin.stats();
+          if (!this.admin.isAnyAdmin(user)) return null;
+          return await this.admin.stats(user);
 
+        // ✅ المنتجات
         case 'اضف_منتج':
-          if (!this.admin.isAdmin(user)) return null;
+          if (!this.admin.isAnyAdmin(user)) return null;
           return await this._handleAddProduct(user, args);
 
         case 'حذف_منتج':
-          if (!this.admin.isAdmin(user)) return null;
+          if (!this.admin.isAnyAdmin(user)) return null;
           return (await this.shop.removeItem(args.join(' '))).message || null;
 
         case 'عدل_منتج':
-          if (!this.admin.isAdmin(user)) return null;
+          if (!this.admin.isAnyAdmin(user)) return null;
           return (await this.shop.editItem(args[0], args[1], args.slice(2).join(' '))).message || null;
 
+        // ✅ الدولاب
         case 'اضف_دولاب':
-          if (!this.admin.isAdmin(user)) return null;
+          if (!this.admin.isAnyAdmin(user)) return null;
           return await this._handleAddWheel(user, args);
 
+        // ✅ الأكواد
         case 'اضف_كود':
-          if (!this.admin.isAdmin(user)) return null;
+          if (!this.admin.isAnyAdmin(user)) return null;
           return (await this.codes.create(args[0], parseInt(args[1]), parseInt(args[2]), user.userId)).message || null;
 
         case 'حذف_كود':
-          if (!this.admin.isAdmin(user)) return null;
+          if (!this.admin.isAnyAdmin(user)) return null;
           return (await this.codes.remove(args[0])).message || null;
 
-        case 'اعطي_ادمن':
-          if (!this.admin.isAdmin(user)) return null;
-          return await this.admin.promote(user, args[0]);
+        // ✅ صلاحيات
+        case 'منح_ادمن':
+          if (!this.admin.isMainAdmin(user)) return null;
+          return await this.admin.promoteToAdmin(user, args);
+
+        case 'منح_ادمن_رئيسي':
+          if (!this.admin.isRootAdmin(user)) return null;
+          return await this.admin.promoteToMainAdmin(user, args);
 
         case 'ازل_ادمن':
-          if (!this.admin.isAdmin(user)) return null;
-          return await this.admin.demote(user, args[0]);
+          if (!this.admin.isRootAdmin(user)) return null;
+          return await this.admin.demoteAdmin(user, args);
 
-        case 'تجربة':
-          if (!this.admin.isAdmin(user)) return null;
-          return await this._handleToggleTest(user, args);
+        // ✅ سجل
+        case 'سجل':
+          if (!this.admin.isRootAdmin(user)) return null;
+          return await this._handleLog(args);
 
+        // ✅ أرشيف
+        case 'ارشيف':
+          if (!this.admin.isRootAdmin(user)) return null;
+          return await this._handleArchive(args);
+
+        // ✅ رسالة
         case 'رسالة': {
-          if (!this.admin.isAdmin(user)) return null;
-          const res = await this.admin.sendMessage(user, args[0], args.slice(1).join(' '));
-          if (res.error) return res.error;
-          return { sendTo: res.sendTo };
+          if (!this.admin.isMainAdmin(user)) return null;
+          const res = await this.admin.sendMessage(user, args);
+          if (res && res.error) return res.error;
+          if (res && res.sendTo) return { sendTo: res.sendTo };
+          return res;
         }
+
+        // ✅ وضع الاختبار
+        case 'تجربة':
+          if (!this.admin.isMainAdmin(user)) return null;
+          return await this._handleToggleTest(user, args);
 
         default:
           return null;
@@ -329,8 +404,207 @@ export default class CommandHandler {
   }
 
   // ===================================
-  // وضع الاختبار (أدمن)
+  // ✅ سجل [حرف] [رقم] [صفحة]
   // ===================================
+  async _handleLog(args) {
+    // سجل              → عرض مساعدة
+    // سجل R            → أرشيف R كامل
+    // سجل R 1          → أرشيف R1
+    // سجل R 1 2        → أرشيف R1 صفحة 2
+    // سجل اليوم        → سجل اليوم
+    // سجل R_001        → سجل لاعب
+
+    if (args.length === 0) {
+      return `📋 السجل
+
+الطريقة:
+• سجل [حرف] [رقم] [صفحة]
+• سجل اليوم
+• سجل [ID لاعب]
+
+أمثلة:
+• سجل R 1        → سجل R1
+• سجل R 1 2      → صفحة 2 من R1
+• سجل اليوم      → عمليات اليوم
+• سجل R_001      → سجل اللاعب
+
+💡 لمعرفة الصفحات: سجل R 1`;
+    }
+
+    const first = args[0];
+
+    // ✅ سجل اليوم
+    if (normalizeArabic(first) === normalizeArabic('اليوم')) {
+      return await this._showTodayLog();
+    }
+
+    // ✅ سجل لاعب (ID)
+    if (/^[A-Z]_\d+$/i.test(first) || /^[A-Z]\d+$/i.test(first)) {
+      const target = await this.userSystem.findByIdentifier(first);
+      if (!target) return `❌ اللاعب غير موجود: ${first}`;
+      return await this._showPlayerLog(target);
+    }
+
+    // ✅ سجل أرشيف (حرف + رقم + صفحة)
+    const letter = first.toUpperCase();
+    if (!/^[A-Z]$/.test(letter)) {
+      return `❌ حرف غير صالح: ${first}
+
+💡 استخدم حرفاً واحداً:
+• سجل R 1
+• سجل I 1`;
+    }
+
+    const archiveIndex = args[1] ? parseInt(args[1]) : null;
+    const page = args[2] ? parseInt(args[2]) : 1;
+
+    if (archiveIndex === null) {
+      // ✅ سجل R (كل أرشيفات R)
+      return await this._showLetterArchives(letter);
+    }
+
+    const archiveId = `${letter}${archiveIndex}`;
+    return await this._showArchiveLog(archiveId, page);
+  }
+
+  // ✅ سجل اليوم
+  async _showTodayLog() {
+    const todayStr = today();
+    const TransactionLog = (await import('../models/TransactionLog.js')).default;
+
+    const logs = await TransactionLog.find({ date: todayStr })
+      .sort({ timestamp: -1 })
+      .limit(20);
+
+    if (logs.length === 0) {
+      return `📋 سجل اليوم\n\n(لا توجد عمليات اليوم)`;
+    }
+
+    let msg = `📋 سجل اليوم (${todayStr})\n\n`;
+    logs.forEach(log => {
+      const time = new Date(log.timestamp).toLocaleTimeString('ar-EG', {
+        hour: '2-digit', minute: '2-digit'
+      });
+      const icon = log.action === 'add' ? '➕' : log.action === 'remove' ? '➖' : '📌';
+      msg += `${icon} [${time}] ${log.targetId}`;
+      if (log.amount > 0) msg += ` ${log.action === 'add' ? '+' : '-'}${log.amount}`;
+      msg += `\n   ${log.reason}\n   بواسطة: ${log.adminId}\n\n`;
+    });
+
+    return msg.trim();
+  }
+
+  // ✅ سجل لاعب
+  async _showPlayerLog(target) {
+    const TransactionLog = (await import('../models/TransactionLog.js')).default;
+
+    const logs = await TransactionLog.find({ targetId: target.userId })
+      .sort({ timestamp: -1 })
+      .limit(20);
+
+    if (logs.length === 0) {
+      return `📋 سجل ${target.userId}\n\n(لا توجد عمليات)`;
+    }
+
+    let msg = `📋 سجل ${target.userId}\n\n`;
+    logs.forEach(log => {
+      const date = new Date(log.timestamp).toLocaleDateString('ar-EG');
+      const time = new Date(log.timestamp).toLocaleTimeString('ar-EG', {
+        hour: '2-digit', minute: '2-digit'
+      });
+      const icon = log.action === 'add' ? '➕' : log.action === 'remove' ? '➖' : '📌';
+      msg += `${icon} ${date} ${time}\n`;
+      if (log.amount > 0) msg += `   ${log.action === 'add' ? '+' : '-'}${log.amount} — ${log.reason}\n`;
+      else msg += `   ${log.reason}\n`;
+      msg += `   بواسطة: ${log.adminId}\n\n`;
+    });
+
+    return msg.trim();
+  }
+
+  // ✅ أرشيف حرف
+  async _showLetterArchives(letter) {
+    const Archive = (await import('../models/Archive.js')).default;
+    const archives = await Archive.find({ letter }).sort({ index: 1 });
+
+    if (archives.length === 0) {
+      return `📋 لا توجد أرشيفات لحرف ${letter}\n\n💡 تُنشأ كل 100 لاعب`;
+    }
+
+    let msg = `📋 أرشيفات ${letter}\n\n`;
+    archives.forEach(a => {
+      msg += `• ${a.archiveId} (${a.fromId} - ${a.toId})\n`;
+      msg += `  👥 ${a.playerCount} لاعب | 💰 ${a.totalRio} ريو\n\n`;
+    });
+
+    msg += `💡 للعرض: سجل ${letter} 1`;
+    return msg;
+  }
+
+  // ✅ أرشيف محدد مع سجل
+  async _showArchiveLog(archiveId, page) {
+    const Archive = (await import('../models/Archive.js')).default;
+    const TransactionLog = (await import('../models/TransactionLog.js')).default;
+
+    const archive = await Archive.findOne({ archiveId });
+    if (!archive) {
+      return `❌ الأرشيف غير موجود: ${archiveId}
+
+💡 اعرض القائمة: سجل ${archiveId[0]}`;
+    }
+
+    // ✅ جلب جميع لاعبين الأرشيف
+    const users = await User.find({
+      userId: { $regex: new RegExp(`^${archive.letter}_`) }
+    }).where('userId').gte(archive.fromId).lte(archive.toId);
+
+    const userIds = users.map(u => u.userId);
+
+    // ✅ السجل
+    const perPage = 20;
+    const total = await TransactionLog.countDocuments({ targetId: { $in: userIds } });
+    const totalPages = Math.ceil(total / perPage);
+    const actualPage = Math.max(1, Math.min(page, totalPages));
+
+    const logs = await TransactionLog.find({ targetId: { $in: userIds } })
+      .sort({ timestamp: -1 })
+      .skip((actualPage - 1) * perPage)
+      .limit(perPage);
+
+    let msg = `📋 ${archiveId} — صفحة ${actualPage}/${totalPages}\n`;
+    msg += `📊 ${archive.playerCount} لاعب | 💰 ${archive.totalRio} ريو\n\n`;
+
+    if (logs.length === 0) {
+      msg += '(لا توجد عمليات)';
+    } else {
+      logs.forEach(log => {
+        const date = new Date(log.timestamp).toLocaleDateString('ar-EG');
+        const icon = log.action === 'add' ? '➕' : log.action === 'remove' ? '➖' : '📌';
+        msg += `${icon} ${log.targetId}`;
+        if (log.amount > 0) msg += ` ${log.action === 'add' ? '+' : '-'}${log.amount}`;
+        msg += ` — ${log.reason}\n`;
+        msg += `   ${date} | بواسطة: ${log.adminId}\n\n`;
+      });
+    }
+
+    if (totalPages > 1) {
+      msg += `\n💡 للتنقل: سجل ${archive.letter} ${archive.index} [صفحة]`;
+    }
+
+    return msg.trim();
+  }
+
+  // ✅ أرشيف (نظرة عامة)
+  async _handleArchive(args) {
+    if (args.length === 0) {
+      return await this.archive.listArchives();
+    }
+
+    const archiveId = args[0].toUpperCase();
+    return await this.archive.showArchive(archiveId);
+  }
+
+  // ✅ وضع الاختبار
   async _handleToggleTest(admin, args) {
     if (!args[0]) {
       const current = admin.isTestMode || false;
@@ -342,7 +616,7 @@ export default class CommandHandler {
     }
 
     const target = await this.userSystem.findByIdentifier(args[0]);
-    if (!target) return '❌ اللاعب غير موجود';
+    if (!target || target.needsLetter) return '❌ اللاعب غير موجود';
 
     const enabled = args[1] === 'تفعيل' || args[1] === 'on' || !args[1];
     const result = await this.userSystem.setTestMode(target.userId, enabled);
@@ -350,26 +624,21 @@ export default class CommandHandler {
   }
 
   // ===================================
-  // الرسائل
+  // الرسائل الأساسية
   // ===================================
   _welcome(user) {
-    if (user.isAdmin) {
-      return `👑 مرحباً ملك
+    const badges = [];
+    if (user.isRootAdmin) badges.push('🔴 رئيسي');
+    else if (user.isMainAdmin) badges.push('🟠 رئيسي');
+    else if (user.isAdmin) badges.push('🟡 مساعد');
 
-🎮 معرفك: ${user.userId}
-💰 رصيدك: ${user.rio} ريو
+    let msg = '🏔️ مغارة ريو\n\n';
+    msg += `🎮 معرفك: ${user.userId}\n`;
+    if (badges.length > 0) msg += `👑 ${badges[0]}\n`;
+    msg += `💰 رصيدك: ${user.rio} ريو\n\n`;
+    msg += '💡 مساعدة — كل الأوامر';
 
-💡 مساعدة — كل الأوامر
-👑 مدير — أوامر الأدمن`;
-    }
-    return `🏔️ مغارة ريو
-
-أهلاً بك!
-
-🎮 معرفك: ${user.userId}
-💰 رصيدك: ${user.rio} ريو
-
-💡 مساعدة — كل الأوامر`;
+    return msg;
   }
 
   _help(user) {
@@ -384,7 +653,7 @@ export default class CommandHandler {
     msg += 'سوق • اشتر • مشترياتي\n\n';
     msg += '📋 المهام\n';
     msg += 'مهام\n';
-    if (user.isAdmin) {
+    if (this.admin.isAnyAdmin(user)) {
       msg += '\n👑 الإدارة\n';
       msg += 'مدير';
     }
@@ -400,53 +669,112 @@ export default class CommandHandler {
 • توب — أفضل 10`;
   }
 
-  _adminHelp() {
+  _adminHelp(user) {
+    const isRoot = this.admin.isRootAdmin(user);
+    const isMain = this.admin.isMainAdmin(user);
+
     let msg = '👑 أوامر الأدمن\n\n';
+
+    // ✅ إضافة نقاط (الكل)
     msg += '💰 النقاط\n';
-    msg += 'اضف_نقاط [ID] [الكمية]\n';
-    msg += 'خصم_نقاط [ID] [الكمية]\n';
-    msg += 'عدل_نقاط [ID] [الكمية]\n\n';
+    msg += 'اضف_نقاط [ID] [الكمية] [السبب]\n';
+    msg += 'حالة [ID]\n';
+    if (isMain) {
+      msg += 'خصم_نقاط [ID] [الكمية] [السبب]\n';
+    }
+    msg += '\n';
+
+    // ✅ اللاعبون
     msg += '👥 اللاعبون\n';
-    msg += 'تجميد [ID]\n';
-    msg += 'فك_تجميد [ID]\n';
-    msg += 'حذف [ID]\n';
-    msg += 'عرض_لاعب [ID]\n\n';
-    msg += '📋 القوائم\n';
-    msg += 'عرض_اللاعبين [صفحة]\n';
+    msg += 'عرض_اللاعبين [ص]\n';
     msg += 'عرض_المجمدين\n';
-    msg += 'عرض_الاكواد\n';
-    msg += 'عرض_المنتجات\n';
-    msg += 'احصائيات\n\n';
+    if (isMain) {
+      msg += 'تجميد [ID] [السبب]\n';
+      msg += 'فك_تجميد [ID]\n';
+      msg += 'حذف [ID]\n';
+    }
+    msg += '\n';
+
+    // ✅ المنتجات
     msg += '🛒 المنتجات\n';
+    msg += 'عرض_المنتجات\n';
     msg += 'اضف_منتج [الاسم] [السعر] [الكمية] [الوصف]\n';
     msg += 'حذف_منتج [الاسم]\n';
     msg += 'عدل_منتج [الاسم] [الحقل] [القيمة]\n\n';
-    msg += '🎡 دولاب الحظ\n';
-    msg += 'اضف_دولاب [الاسم] [السعر] [الجوائز]\n\n';
+
+    // ✅ الأكواد
     msg += '🎫 الأكواد\n';
+    msg += 'عرض_الاكواد\n';
     msg += 'اضف_كود [الكود] [الريو] [العدد]\n';
     msg += 'حذف_كود [الكود]\n\n';
-    msg += '👑 الأدمن\n';
-    msg += 'اعطي_ادمن [ID]\n';
-    msg += 'ازل_ادمن [ID]\n\n';
-    msg += '🤖 البوت\n';
-    msg += 'ايقاف_البوت — إيقاف البوت\n';
-    msg += 'تشغيل_البوت — تشغيل البوت\n\n';
-    msg += '🧪 وضع الاختبار\n';
-    msg += 'تجربة — لحسابك\n';
-    msg += 'تجربة [ID] — للاعب\n\n';
-    msg += '📩 التواصل\n';
-    msg += 'رسالة [ID] [النص]\n\n';
+
+    // ✅ الدولاب
+    msg += '🎡 دولاب الحظ\n';
+    msg += 'اضف_دولاب [الاسم] [السعر] [الجوائز]\n\n';
+
+    // ✅ الإحصائيات
+    msg += '📊 إحصائيات\n';
+    msg += 'احصائيات\n\n';
+
+    // ✅ الصلاحيات
+    if (isMain) {
+      msg += '👑 الصلاحيات\n';
+      msg += 'منح_ادمن [ID]\n';
+      if (isRoot) {
+        msg += 'منح_ادمن_رئيسي [ID]\n';
+        msg += 'ازل_ادمن [ID]\n';
+      }
+      msg += '\n';
+    }
+
+    // ✅ السجل والأرشيف
+    if (isRoot) {
+      msg += '📋 السجل\n';
+      msg += 'سجل [حرف] [رقم] [صفحة]\n';
+      msg += 'سجل اليوم\n';
+      msg += 'سجل [ID]\n\n';
+      msg += '📚 الأرشيف\n';
+      msg += 'ارشيف\n';
+      msg += 'ارشيف [رمز]\n\n';
+    }
+
+    // ✅ التواصل
+    if (isMain) {
+      msg += '📩 التواصل\n';
+      msg += 'رسالة [ID] [النص]\n\n';
+    }
+
+    // ✅ التحكم
+    if (isMain) {
+      msg += '🤖 التحكم\n';
+      msg += 'ايقاف_البوت\n';
+      msg += 'تشغيل_البوت\n';
+      msg += 'تجربة — لحسابك\n\n';
+    }
+
+    // ✅ الحذف (رئيسي فقط)
+    if (isRoot) {
+      msg += '🗑️ خطر\n';
+      msg += 'حذف_الكل تأكيد\n\n';
+    }
+
     msg += '💡 الأوامر تقبل _ أو مسافة';
     return msg;
   }
 
   _myId(user) {
-    return `🆔 معلوماتك
+    const badges = [];
+    if (user.isRootAdmin) badges.push('🔴 أدمن رئيسي');
+    else if (user.isMainAdmin) badges.push('🟠 أدمن رئيسي');
+    else if (user.isAdmin) badges.push('🟡 أدمن مساعد');
+    if (user.isTestMode) badges.push('🧪 اختبار');
 
-🎮 معرف اللعبة: ${user.userId}
-📱 معرف المنصة: ${user.platformId}
-🌐 المنصة: ${user.platform}${user.isAdmin ? '\n👑 أدمن: نعم' : ''}${user.isTestMode ? '\n🧪 وضع اختبار: مفعّل' : ''}`;
+    let msg = `🆔 معلوماتك\n\n`;
+    msg += `🎮 معرف اللعبة: ${user.userId}\n`;
+    msg += `📱 معرف المنصة: ${user.platformId}\n`;
+    msg += `🌐 المنصة: ${user.platform}`;
+    if (badges.length > 0) msg += `\n${badges.join('\n')}`;
+    return msg;
   }
 
   _balance(user) {
@@ -531,7 +859,7 @@ export default class CommandHandler {
 اكتب: صديق [كود صديقك]
 
 مثال:
-صديق M001R
+صديق R_001
 
 🎁 المكافأة:
 +1 ريو لك
@@ -600,8 +928,7 @@ export default class CommandHandler {
 
 القواعد:
 • 3-10 أحرف
-• عربية أو إنجليزية أو أرقام
-• بدون رموز`;
+• عربية أو إنجليزية أو أرقام`;
     }
 
     const newName = args.join(' ').trim();
@@ -614,7 +941,7 @@ export default class CommandHandler {
       return '❌ الاسم يحتوي على رموز غير مسموحة';
     }
 
-    const BAD_WORDS = ['ادمن', 'admin', 'owner', 'mgara', 'ريو', 'M000R'];
+    const BAD_WORDS = ['ادمن', 'admin', 'owner', 'mgara', 'ريو', 'R_000'];
     if (BAD_WORDS.some(w => newName.toLowerCase().includes(w.toLowerCase()))) {
       return '❌ هذا الاسم غير مسموح';
     }
@@ -721,4 +1048,4 @@ export default class CommandHandler {
     });
     return msg;
   }
-            }
+                                      }

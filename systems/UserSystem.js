@@ -3,11 +3,29 @@ import User from '../models/User.js';
 import Counter from '../models/Counter.js';
 import { getLevelFromEarned, today } from '../utils/helpers.js';
 
+// ✅ متغير عالمي لحالة البوت
+let BOT_PAUSED = false;
+
 export default class UserSystem {
   constructor() {
     console.log('👤 UserSystem جاهز');
   }
 
+  // ===================================
+  // ✅ حالة البوت
+  // ===================================
+  isBotPaused() {
+    return BOT_PAUSED;
+  }
+
+  setBotPaused(value) {
+    BOT_PAUSED = value;
+    console.log(`🤖 حالة البوت: ${value ? 'متوقف' : 'يعمل'}`);
+  }
+
+  // ===================================
+  // توليد ID
+  // ===================================
   async generateUserId() {
     const counter = await Counter.findOneAndUpdate(
       { _id: 'userId' },
@@ -27,27 +45,17 @@ export default class UserSystem {
       return user;
     }
 
-    // ✅ هل يصبح هذا المستخدم M000R؟
     let userId;
     const adminPlatformId = (process.env.ADMIN_PLATFORM_ID || '').trim();
 
     if (adminPlatformId && adminPlatformId === platformId) {
       const existing = await User.findOne({ userId: 'M000R' });
-      if (!existing) {
-        userId = 'M000R';
-      } else {
-        userId = await this.generateUserId();
-      }
+      userId = existing ? await this.generateUserId() : 'M000R';
     } else {
-      // إذا لا يوجد admin بعد وكان هذا أول مستخدم
       const adminExists = await User.findOne({ userId: 'M000R' });
       if (!adminExists && !adminPlatformId) {
         const userCount = await User.countDocuments();
-        if (userCount === 0) {
-          userId = 'M000R';
-        } else {
-          userId = await this.generateUserId();
-        }
+        userId = userCount === 0 ? 'M000R' : await this.generateUserId();
       } else {
         userId = await this.generateUserId();
       }
@@ -78,29 +86,24 @@ export default class UserSystem {
 
   async findByUserId(userId) {
     if (!userId) return null;
-    const clean = userId.trim().toUpperCase();
-    return await User.findOne({ userId: clean });
+    return await User.findOne({ userId: userId.trim().toUpperCase() });
   }
 
   async findByIdentifier(input) {
     if (!input) return null;
     const clean = input.trim();
 
-    // ✅ M001R
     let user = await User.findOne({ userId: clean.toUpperCase() });
     if (user) return user;
 
-    // ✅ 001 أو 1 → M001R
     if (/^\d+$/.test(clean)) {
       const padded = String(clean).padStart(3, '0');
       user = await User.findOne({ userId: `M${padded}R` });
       if (user) return user;
-      // ربما رقم كبير
       user = await User.findOne({ userId: `M${clean}R` });
       if (user) return user;
     }
 
-    // ✅ M1R → M001R
     const mMatch = clean.match(/^M(\d+)R$/i);
     if (mMatch) {
       const padded = String(mMatch[1]).padStart(3, '0');
@@ -120,6 +123,9 @@ export default class UserSystem {
     return user.level;
   }
 
+  // ===================================
+  // تجميد / فك تجميد
+  // ===================================
   async freeze(userId, reason = 'تجميد إداري') {
     const user = await this.findByUserId(userId);
     if (!user) return { error: '❌ اللاعب غير موجود' };
@@ -154,7 +160,6 @@ export default class UserSystem {
     return { success: true, deletedId };
   }
 
-  // ✅ فحص التجميد مع منع تكرار الرسالة
   shouldNotifyFrozen(user) {
     if (!user.isFrozen) return false;
     const sessionGapMs = 30 * 60 * 1000;
@@ -182,6 +187,24 @@ export default class UserSystem {
       frozen,
       totalRio: totalRio[0]?.sum || 0,
       totalEarned: totalEarned[0]?.sum || 0
+    };
+  }
+
+  // ===================================
+  // ✅ وضع الاختبار
+  // ===================================
+  async setTestMode(userId, enabled) {
+    const user = await this.findByUserId(userId);
+    if (!user) return { error: '❌ اللاعب غير موجود' };
+
+    user.isTestMode = enabled;
+    await user.save();
+
+    return {
+      success: true,
+      message: enabled
+        ? `🧪 تم تفعيل وضع الاختبار لـ ${user.userId}\n\n💡 يمكنه اللعب بلا حدود`
+        : `✅ تم إلغاء وضع الاختبار لـ ${user.userId}`
     };
   }
 }

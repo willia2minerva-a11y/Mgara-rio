@@ -35,7 +35,43 @@ export function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
-// ✅ المستويات — بناءً على totalEarned (لا ينقص أبدًا)
+// ===================================
+// ✅ تطبيع النص العربي (الهمزات + "ال")
+// ===================================
+export function normalizeArabic(text) {
+  if (!text) return '';
+  return String(text)
+    .trim()
+    .toLowerCase()
+    .replace(/^ال/, '')                       // إزالة "ال" من البداية
+    .replace(/[أإآا]/g, 'ا')                  // توحيد الهمزات
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/ؤ/g, 'و')
+    .replace(/ئ/g, 'ي')
+    .replace(/[\u064B-\u065F\u0670]/g, '')    // إزالة التشكيل
+    .replace(/[^\u0600-\u06FFa-z0-9\s_]/g, '') // إزالة الرموز
+    .replace(/[\s_]+/g, ' ')                  // توحيد المسافات و _
+    .trim();
+}
+
+// ✅ هل النصان متطابقان؟
+export function arabicMatch(text1, text2) {
+  return normalizeArabic(text1) === normalizeArabic(text2);
+}
+
+// ✅ البحث عن تطابق
+export function findArabicMatch(input, options) {
+  const normalized = normalizeArabic(input);
+  for (const opt of options) {
+    if (normalizeArabic(opt) === normalized) return opt;
+  }
+  return null;
+}
+
+// ===================================
+// ✅ المستويات
+// ===================================
 const LEVEL_TABLE = [
   { level: 1, needed: 0 },
   { level: 2, needed: 10 },
@@ -72,7 +108,6 @@ export function getLevelFromEarned(totalEarned) {
   return lvl;
 }
 
-// ✅ مكافآت المستويات (غير تراكمية - تُستبدل)
 export function getLevelBonus(level) {
   if (level >= 100) return { time: 30, discount: 30, title: 'ملك' };
   if (level >= 90) return { time: 20, discount: 25, title: 'أسطورة' };
@@ -89,7 +124,6 @@ export function getLevelBonus(level) {
   return { time: 0, discount: 0, title: null };
 }
 
-// ✅ مكافآت streak الهدية
 export function getStreakBonus(streakDay) {
   const rewards = {
     7: 3,

@@ -1,6 +1,6 @@
 // systems/ShopSystem.js
 import ShopItem from '../models/ShopItem.js';
-import { getLevelBonus } from '../utils/helpers.js';
+import { getLevelBonus, normalizeArabic } from '../utils/helpers.js';
 
 const DEFAULT_ITEMS = [
   // 🎫 مساعدات
@@ -43,9 +43,6 @@ export default class ShopSystem {
     console.log('🛒 ShopSystem جاهز');
   }
 
-  // ===================================
-  // التهيئة الذكية
-  // ===================================
   async initialize() {
     let added = 0;
     let updated = 0;
@@ -131,9 +128,28 @@ export default class ShopSystem {
   // شراء
   // ===================================
   async purchase(user, itemName) {
-    const normalized = itemName.trim().replace(/\s+/g, '_');
-    let item = await ShopItem.findOne({ name: normalized, active: true });
-    if (!item) item = await ShopItem.findOne({ name: itemName.trim(), active: true });
+    // ✅ بحث ذكي بالهمزات وال "ال"
+    const cleanInput = itemName.trim();
+    let item = null;
+
+    // 1. البحث المباشر
+    const normalized = cleanInput.replace(/\s+/g, '_');
+    item = await ShopItem.findOne({ name: normalized, active: true });
+    if (!item) item = await ShopItem.findOne({ name: cleanInput, active: true });
+
+    // 2. البحث الذكي
+    if (!item) {
+      const allItems = await ShopItem.find({ active: true });
+      const normalizedInput = normalizeArabic(cleanInput);
+      for (const i of allItems) {
+        const normalizedName = normalizeArabic(i.name.replace(/_/g, ' '));
+        if (normalizedName === normalizedInput) {
+          item = i;
+          break;
+        }
+      }
+    }
+
     if (!item) return { error: `❌ المنتج غير موجود` };
 
     // فحص التكرار
@@ -265,19 +281,16 @@ export default class ShopSystem {
     user.markModified('unlockedGames');
 
     switch (item.effect) {
-      // مساعدات
       case 'fifty_fifty': user.inventory.fifty_fifty += (item.value || 1); break;
       case 'skip': user.inventory.skip += (item.value || 1); break;
       case 'retry': user.inventory.retry += (item.value || 1); break;
 
-      // ميزات دائمة
       case 'extra_time': user.permanentPerks.extraTime += (item.value || 2); break;
       case 'extra_discount': user.permanentPerks.extraDiscount += (item.value || 5); break;
       case 'extra_gift': user.permanentPerks.extraGift += (item.value || 1); break;
       case 'free_skip': user.permanentPerks.freeSkip = true; break;
       case 'extra_question': user.permanentPerks.extraQuestion += (item.value || 1); break;
 
-      // اسم مخصص
       case 'custom_name':
         user.ownedBadges = user.ownedBadges || [];
         if (!user.ownedBadges.includes('اسم_مخصص')) {
@@ -285,7 +298,6 @@ export default class ShopSystem {
         }
         break;
 
-      // ديكورات
       case 'badge_frame':
       case 'badge_gold':
       case 'badge_flame':
@@ -299,7 +311,6 @@ export default class ShopSystem {
         }
         break;
 
-      // مفاتيح الألعاب
       case 'unlock_كلمة':
       case 'unlock_الكلمة':
         user.unlockedGames = user.unlockedGames || [];
@@ -319,7 +330,7 @@ export default class ShopSystem {
   }
 
   // ===================================
-  // إدارة المنتجات (أدمن)
+  // إدارة المنتجات
   // ===================================
   async addItem(name, price, quantity, description, category = 'external', wheelPrizes = null) {
     const normalized = name.trim().replace(/\s+/g, '_');
@@ -376,9 +387,6 @@ export default class ShopSystem {
     return msg;
   }
 
-  // ===================================
-  // أدوات
-  // ===================================
   parsePrizes(text) {
     const cleaned = text.replace(/[\[\]]/g, '').trim();
     const parts = cleaned.split(',').map(p => p.trim()).filter(Boolean);
@@ -394,4 +402,4 @@ export default class ShopSystem {
   getBadgeIcon(effect) {
     return BADGE_ICONS[effect] || '';
   }
-      }
+  }

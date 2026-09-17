@@ -1,5 +1,5 @@
 // core/CommandHandler.js
-import { today } from '../utils/helpers.js';
+import { today, normalizeArabic } from '../utils/helpers.js';
 
 const COMPOUND_COMMANDS = [
   'اضف_نقاط', 'خصم_نقاط', 'عدل_نقاط',
@@ -10,14 +10,15 @@ const COMPOUND_COMMANDS = [
   'اضف_كود', 'حذف_كود',
   'اضف_دولاب', 'حذف_دولاب',
   'اعطي_ادمن', 'ازل_ادمن',
-  'اضف_ريو', 'خصم_ريو'
+  'اضف_ريو', 'خصم_ريو',
+  'ايقاف_البوت', 'تشغيل_البوت'
 ];
 
 const ALIASES = {
   // بدء
   'مرحبا': 'بدء', 'اهلا': 'بدء', 'هلا': 'بدء', 'هاي': 'بدء',
   'السلام عليكم': 'بدء', 'hi': 'بدء', 'hello': 'بدء', 'start': 'بدء',
-  'تفعيل': 'بدء', 'تشغيل': 'بدء', 'بداية': 'بدء',
+  'تفعيل': 'بدء', 'بداية': 'بدء',
 
   // مساعدة
   'اوامر': 'مساعدة', 'الاوامر': 'مساعدة', 'help': 'مساعدة',
@@ -45,6 +46,8 @@ const ALIASES = {
 
   // الإدارة
   'الادمن': 'مدير', 'admin': 'مدير',
+  'ايقاف': 'ايقاف_البوت', 'وقف': 'ايقاف_البوت',
+  'استئناف': 'تشغيل_البوت', 'استمرار': 'تشغيل_البوت',
 
   // المشتريات
   'مشتريات': 'مشترياتي', 'سجلي': 'مشترياتي',
@@ -58,7 +61,6 @@ const LINKS = {
   group: process.env.GROUP_LINK || 'https://facebook.com/groups/MgaraRio'
 };
 
-// ✅ أحرف/إجابات الألعاب
 const GAME_ANSWERS = [
   'أ', 'ا', 'ب', 'ج', 'د',
   '1', '2', '3', '4',
@@ -88,12 +90,54 @@ export default class CommandHandler {
     const text = (message || '').trim();
     if (!text) return null;
 
+    const parts = text.split(/\s+/);
+    let cmd = parts[0];
+    let args = parts.slice(1);
+
+    if (parts.length >= 2) {
+      const twoWord = parts.slice(0, 2).join('_');
+      if (COMPOUND_COMMANDS.includes(twoWord)) {
+        cmd = twoWord;
+        args = parts.slice(2);
+      }
+    }
+
+    if (ALIASES[cmd]) cmd = ALIASES[cmd];
+
+    // ===================================
+    // ✅ أوامر البوت الحساسة (قبل فحص الإيقاف)
+    // ===================================
+    if (['ايقاف_البوت', 'تشغيل_البوت'].includes(cmd)) {
+      const admin = await this.userSystem.getOrCreate(sender.id, sender.platform);
+      if (!this.admin.isAdmin(admin)) return null;
+
+      if (cmd === 'ايقاف_البوت') {
+        this.userSystem.setBotPaused(true);
+        return '⏸️ تم إيقاف البوت\n\n💡 التسجيل الجديد ما زال يعمل';
+      } else {
+        this.userSystem.setBotPaused(false);
+        return '▶️ تم تشغيل البوت';
+      }
+    }
+
+    // ===================================
+    // ✅ فحص إيقاف البوت
+    // ===================================
+    const paused = this.userSystem.isBotPaused();
+
     const user = await this.userSystem.getOrCreate(sender.id, sender.platform);
+
+    if (paused) {
+      const allowedWhenPaused = ['بدء', 'مساعدة', 'معرفي'];
+      if (!allowedWhenPaused.includes(cmd)) {
+        return null;
+      }
+    }
 
     // ✅ التجميد
     if (user.isFrozen) {
       const allowed = ['نقاطي', 'ملفي', 'مساعدة', 'توب', 'معرفي'];
-      const firstWord = text.split(/\s+/)[0];
+      const firstWord = parts[0];
       if (!allowed.includes(firstWord)) {
         if (this.userSystem.shouldNotifyFrozen(user)) {
           await this.userSystem.markFrozenNotified(user);
@@ -103,24 +147,8 @@ export default class CommandHandler {
       }
     }
 
-    const parts = text.split(/\s+/);
-    let cmd = parts[0];
-    let args = parts.slice(1);
-
-    // ✅ الأوامر المركبة
-    if (parts.length >= 2) {
-      const twoWord = parts.slice(0, 2).join('_');
-      if (COMPOUND_COMMANDS.includes(twoWord)) {
-        cmd = twoWord;
-        args = parts.slice(2);
-      }
-    }
-
-    // ✅ Aliases
-    if (ALIASES[cmd]) cmd = ALIASES[cmd];
-
     try {
-      // ✅ فحص إجابة لعبة نشطة (أولوية عالية)
+      // ✅ فحص إجابة لعبة نشطة
       if (GAME_ANSWERS.includes(cmd) || (parts[0] && ['حجر', 'ورقة', 'مقص'].includes(parts[0]))) {
         const handled = await this._handleGameAnswer(user, text);
         if (handled !== null) return handled;
@@ -257,6 +285,10 @@ export default class CommandHandler {
           if (!this.admin.isAdmin(user)) return null;
           return await this.admin.demote(user, args[0]);
 
+        case 'تجربة':
+          if (!this.admin.isAdmin(user)) return null;
+          return await this._handleToggleTest(user, args);
+
         case 'رسالة': {
           if (!this.admin.isAdmin(user)) return null;
           const res = await this.admin.sendMessage(user, args[0], args.slice(1).join(' '));
@@ -274,10 +306,9 @@ export default class CommandHandler {
   }
 
   // ===================================
-  // ✅ معالجة إجابة لعبة نشطة
+  // معالجة إجابة لعبة
   // ===================================
   async _handleGameAnswer(user, text) {
-    // فحص اللعبة النشطة
     const active = await this.gameSystem.hasActiveGame(user);
     if (!active) return null;
 
@@ -285,7 +316,6 @@ export default class CommandHandler {
     if (result.silent) return null;
     if (result.error) return result.error;
 
-    // معالجة إضافية
     try {
       if (user.gamesPlayed === 1 && user.referredBy) {
         await this.referral.completeReferral(user);
@@ -299,7 +329,28 @@ export default class CommandHandler {
   }
 
   // ===================================
-  // الرسائل الأساسية
+  // وضع الاختبار (أدمن)
+  // ===================================
+  async _handleToggleTest(admin, args) {
+    if (!args[0]) {
+      const current = admin.isTestMode || false;
+      admin.isTestMode = !current;
+      await admin.save();
+      return current
+        ? '✅ تم إلغاء وضع الاختبار'
+        : '🧪 تم تفعيل وضع الاختبار\n\n💡 يمكنك اللعب بلا حدود';
+    }
+
+    const target = await this.userSystem.findByIdentifier(args[0]);
+    if (!target) return '❌ اللاعب غير موجود';
+
+    const enabled = args[1] === 'تفعيل' || args[1] === 'on' || !args[1];
+    const result = await this.userSystem.setTestMode(target.userId, enabled);
+    return result.message || result.error;
+  }
+
+  // ===================================
+  // الرسائل
   // ===================================
   _welcome(user) {
     if (user.isAdmin) {
@@ -378,6 +429,12 @@ export default class CommandHandler {
     msg += '👑 الأدمن\n';
     msg += 'اعطي_ادمن [ID]\n';
     msg += 'ازل_ادمن [ID]\n\n';
+    msg += '🤖 البوت\n';
+    msg += 'ايقاف_البوت — إيقاف البوت\n';
+    msg += 'تشغيل_البوت — تشغيل البوت\n\n';
+    msg += '🧪 وضع الاختبار\n';
+    msg += 'تجربة — لحسابك\n';
+    msg += 'تجربة [ID] — للاعب\n\n';
     msg += '📩 التواصل\n';
     msg += 'رسالة [ID] [النص]\n\n';
     msg += '💡 الأوامر تقبل _ أو مسافة';
@@ -389,7 +446,7 @@ export default class CommandHandler {
 
 🎮 معرف اللعبة: ${user.userId}
 📱 معرف المنصة: ${user.platformId}
-🌐 المنصة: ${user.platform}${user.isAdmin ? '\n👑 أدمن: نعم' : ''}`;
+🌐 المنصة: ${user.platform}${user.isAdmin ? '\n👑 أدمن: نعم' : ''}${user.isTestMode ? '\n🧪 وضع اختبار: مفعّل' : ''}`;
   }
 
   _balance(user) {
@@ -425,9 +482,6 @@ export default class CommandHandler {
     return msg;
   }
 
-  // ===================================
-  // الفعاليات
-  // ===================================
   async _handleGift(user) {
     const result = await this.dailyGift.claim(user);
     if (result.error) return result.error;
@@ -490,9 +544,6 @@ export default class CommandHandler {
     return null;
   }
 
-  // ===================================
-  // السوق
-  // ===================================
   async _handleBuy(user, args) {
     if (!args[0]) {
       return `🛒 الشراء
@@ -528,9 +579,6 @@ export default class CommandHandler {
     return msg;
   }
 
-  // ===================================
-  // الاسم المخصص
-  // ===================================
   async _handleSetName(user, args) {
     if (!user.ownedBadges?.includes('اسم_مخصص')) {
       return `🏷️ الاسم المخصص
@@ -581,9 +629,6 @@ export default class CommandHandler {
     return `✅ تم تعيين اسمك: "${newName}"`;
   }
 
-  // ===================================
-  // اختيار الديكور
-  // ===================================
   async _handleSetBadge(user, args) {
     const badges = user.ownedBadges || [];
     if (badges.length === 0) {
@@ -620,9 +665,6 @@ export default class CommandHandler {
     return `✅ تم تفعيل: ${match.replace(/_/g, ' ')}`;
   }
 
-  // ===================================
-  // إضافة منتج (أدمن)
-  // ===================================
   async _handleAddProduct(admin, args) {
     if (args.length < 4) {
       return `❌ الاستخدام: اضف_منتج [الاسم] [السعر] [الكمية] [الوصف]
@@ -639,9 +681,6 @@ export default class CommandHandler {
     return result.message || result.error;
   }
 
-  // ===================================
-  // إضافة دولاب (أدمن)
-  // ===================================
   async _handleAddWheel(admin, args) {
     if (args.length < 3) {
       return `❌ الاستخدام: اضف_دولاب [الاسم] [السعر] [الجوائز]
@@ -682,4 +721,4 @@ export default class CommandHandler {
     });
     return msg;
   }
-              }
+            }

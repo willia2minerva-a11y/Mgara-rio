@@ -9,7 +9,7 @@ export default class PointsSystem {
   }
 
   // ===================================
-  // إضافة ريو (مع تسجيل إذا كان من أدمن)
+  // إضافة ريو (عادي — بدون سبب)
   // ===================================
   async addRio(user, amount) {
     if (amount <= 0) return user;
@@ -20,7 +20,9 @@ export default class PointsSystem {
     return user;
   }
 
-  // ✅ إضافة من أدمن (مع سبب)
+  // ===================================
+  // ✅ إضافة من أدمن (مع سبب + ربط بالمهام)
+  // ===================================
   async adminAddRio(admin, targetUser, amount, reason) {
     if (amount <= 0) {
       return { error: '❌ الكمية يجب أن تكون أكبر من 0' };
@@ -71,14 +73,31 @@ export default class PointsSystem {
       timestamp: new Date()
     });
 
-    return {
-      success: true,
-      message: `✅ تمت إضافة ${amount} ريو\n\n👤 ${targetUser.userId}\n💰 رصيده: ${targetUser.rio}\n📝 السبب: ${reason}`
-    };
+    // ===================================
+    // ✅ ربط السبب بالمهام
+    // ===================================
+    let completedMissions = [];
+    try {
+      completedMissions = await this._updateMissions(targetUser, reasonKey);
+    } catch (e) {
+      console.error('⚠️ فشل تحديث المهام:', e.message);
+    }
+
+    // ✅ بناء الرسالة
+    let msg = `✅ تمت إضافة ${amount} ريو\n\n`;
+    msg += `👤 ${targetUser.userId}\n`;
+    msg += `💰 رصيده: ${targetUser.rio}\n`;
+    msg += `📝 السبب: ${reason}`;
+
+    if (completedMissions.length > 0) {
+      msg += `\n\n🎉 مهمة مكتملة: ${completedMissions[0].name} (+${completedMissions[0].reward} ريو)`;
+    }
+
+    return { success: true, message: msg };
   }
 
   // ===================================
-  // خصم ريو (من أدمن)
+  // ✅ خصم من أدمن (مع سبب + ربط بالمهام)
   // ===================================
   async adminRemoveRio(admin, targetUser, amount, reason) {
     if (amount <= 0) {
@@ -91,28 +110,88 @@ export default class PointsSystem {
       };
     }
 
-    // ✅ خصم
     targetUser.rio -= amount;
-    // ⚠️ totalEarned لا ينقص (المستوى ثابت)
     await targetUser.save();
 
-    // ✅ تسجيل
     const todayStr = today();
+    const reasonKey = this.extractReasonKey(reason);
+
     await TransactionLog.create({
       adminId: admin.userId,
       targetId: targetUser.userId,
       action: 'remove',
       amount,
       reason,
-      reasonKey: this.extractReasonKey(reason),
+      reasonKey,
       date: todayStr,
       timestamp: new Date()
     });
 
-    return {
-      success: true,
-      message: `✅ تم خصم ${amount} ريو\n\n👤 ${targetUser.userId}\n💰 رصيده: ${targetUser.rio}\n📝 السبب: ${reason}`
-    };
+    // ===================================
+    // ✅ ربط الشراء بالمهام
+    // ===================================
+    let completedMissions = [];
+    try {
+      completedMissions = await this._updateMissions(targetUser, reasonKey);
+    } catch (e) {
+      console.error('⚠️ فشل تحديث المهام:', e.message);
+    }
+
+    let msg = `✅ تم خصم ${amount} ريو\n\n`;
+    msg += `👤 ${targetUser.userId}\n`;
+    msg += `💰 رصيده: ${targetUser.rio}\n`;
+    msg += `📝 السبب: ${reason}`;
+
+    if (completedMissions.length > 0) {
+      msg += `\n\n🎉 مهمة مكتملة: ${completedMissions[0].name} (+${completedMissions[0].reward} ريو)`;
+    }
+
+    return { success: true, message: msg };
+  }
+
+  // ===================================
+  // ✅ تحديث المهام حسب السبب
+  // ===================================
+  async _updateMissions(user, reasonKey) {
+    const WeeklyMissions = (await import('./WeeklyMissions.js')).default;
+    const missions = new WeeklyMissions(this);
+    await missions.ensureWeek(user);
+
+    const key = reasonKey.toLowerCase();
+    let missionField = null;
+
+    // ✅ ألعاب (لعب)
+    const gameKeys = ['لعب_حجر', 'لعب_ترتيب', 'لعب_اسئلة', 'لعب_سرعة',
+                      'لعب_صح', 'لعب_تخمين', 'لعب_الكلمة', 'لعب_أكمل', 'لعب_معلومات'];
+    if (gameKeys.some(g => key.startsWith(g) || key.includes(g))) {
+      missionField = 'gamesPlayed';
+    }
+
+    // ✅ فاز بفعالية → يزيد العب
+    else if (key.includes('فاز') || key.includes('فعالية')) {
+      missionField = 'gamesWon';
+    }
+
+    // ✅ إحالة
+    else if (key.includes('صديق') || key.includes('احالة') || key.includes('إحالة')) {
+      missionField = 'referrals';
+    }
+
+    // ✅ شراء
+    else if (key.startsWith('اشتر') || key.includes('اشترى')) {
+      missionField = 'purchases';
+    }
+
+    // ✅ هدية
+    else if (key.includes('هدية')) {
+      missionField = 'gifts';
+    }
+
+    if (!missionField) return [];
+
+    await missions.track(user, missionField);
+    const completed = await missions.check(user);
+    return completed || [];
   }
 
   // ===================================
@@ -138,7 +217,7 @@ export default class PointsSystem {
     if (!reason) return 'غير محدد';
     const clean = reason.trim().toLowerCase();
 
-    // ✅ أسباب معروفة
+    // ✅ أسباب الألعاب (فحص دقيق)
     if (clean.includes('حجر') || clean.includes('ورقة') || clean.includes('مقص')) {
       return 'لعب_حجر_ورقة_مقص';
     }
@@ -150,16 +229,28 @@ export default class PointsSystem {
     if (clean.includes('كلمة') || clean.includes('مخفية')) return 'لعب_الكلمة_المخفية';
     if (clean.includes('مثل')) return 'لعب_أكمل_المثل';
     if (clean.includes('معلومات')) return 'لعب_معلومات_عامة';
+
+    // ✅ هدية
     if (clean.includes('هدية')) return 'هدية_يومية';
+
+    // ✅ فعالية
     if (clean.includes('فاز') || clean.includes('فعالية')) return 'فاز_بفعالية';
+
+    // ✅ مكافأة
     if (clean.includes('مكافأة')) return 'مكافأة';
+
+    // ✅ إحالة
+    if (clean.includes('صديق') || clean.includes('احالة') || clean.includes('إحالة')) {
+      return 'إحالة_صديق';
+    }
+
+    // ✅ شراء
     if (clean.includes('اشتر') || clean.includes('شراء')) {
-      // استخراج اسم المنتج
       const match = clean.match(/(?:اشتر[ىي]?|شراء)\s+(.+)/);
       return match ? `اشترى_${match[1].trim().replace(/\s+/g, '_')}` : 'اشترى_منتج';
     }
 
-    // ✅ المفتاح = السبب كما هو (مختصر)
+    // ✅ المفتاح = السبب كما هو
     return clean.replace(/\s+/g, '_').substring(0, 50);
   }
 
@@ -211,4 +302,4 @@ export default class PointsSystem {
       perPage
     };
   }
-}
+  }

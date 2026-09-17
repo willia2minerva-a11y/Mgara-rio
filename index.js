@@ -22,6 +22,7 @@ import AchievementSystem from './systems/AchievementSystem.js';
 import WeeklyMissions from './systems/WeeklyMissions.js';
 import LeaderboardSystem from './systems/LeaderboardSystem.js';
 import AdminSystem from './systems/AdminSystem.js';
+import ArchiveSystem from './systems/ArchiveSystem.js';
 
 const MONGODB_URI = process.env.MONGODB_URI;
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
@@ -65,7 +66,6 @@ async function connectDB() {
   await mongoose.connect(MONGODB_URI);
   console.log('✅ متصل بقاعدة البيانات');
 
-  // حذف الفهارس القديمة
   try {
     const collections = await mongoose.connection.db.listCollections().toArray();
     if (collections.find(c => c.name === 'users')) {
@@ -99,6 +99,7 @@ function initSystems() {
   const leaderboard = new LeaderboardSystem();
   const adminSystem = new AdminSystem({ userSystem, pointsSystem, shopSystem: shop, codeSystem: codes });
   const gameSystem = new GameSystem(pointsSystem, achievementSystem, missions, millionaireGame);
+  const archiveSystem = new ArchiveSystem();
 
   const systems = {
     userSystem,
@@ -113,7 +114,8 @@ function initSystems() {
     referral,
     missions,
     leaderboard,
-    adminSystem
+    adminSystem,
+    archiveSystem
   };
 
   commandHandler = new CommandHandler(systems);
@@ -133,7 +135,6 @@ async function handleMessage(platformId, platform, text) {
 
     if (response === null || response === undefined) return;
 
-    // رسالة خاصة من الأدمن
     if (response.sendTo) {
       await gateway.enqueue({
         recipientId: response.sendTo.platformId,
@@ -143,7 +144,6 @@ async function handleMessage(platformId, platform, text) {
       return;
     }
 
-    // رسالة عادية
     if (typeof response === 'string') {
       await gateway.enqueue({
         recipientId: platformId,
@@ -205,18 +205,6 @@ app.get('/gateway', (req, res) => {
   res.json(gateway.getStats());
 });
 
-app.get('/admin/reset/:secret', async (req, res) => {
-  const secret = process.env.RESET_SECRET || 'mgara-reset-2026';
-  if (req.params.secret !== secret) return res.status(403).json({ error: 'ممنوع' });
-
-  try {
-    const result = await User.deleteMany({});
-    res.json({ success: true, deleted: result.deletedCount });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
 // ===================================
 // Telegram Bot
 // ===================================
@@ -263,7 +251,6 @@ async function main() {
   }
 }
 
-// Shutdown
 process.on('SIGTERM', async () => {
   console.log('🛑 SIGTERM');
   await gateway.shutdown();

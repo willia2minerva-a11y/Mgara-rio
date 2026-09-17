@@ -3,8 +3,8 @@ import User from '../models/User.js';
 import Counter from '../models/Counter.js';
 import { getLevelFromEarned, today } from '../utils/helpers.js';
 
-// ✅ حالة البوت
-let BOT_PAUSED = false;
+// ✅ وضع البوت
+let BOT_MODE = 'auto'; // 'auto' | 'manual' | 'off'
 
 // ✅ ترتيب الحروف
 const LETTERS = ['R', 'I', 'O', 'P', 'Q', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
@@ -16,19 +16,34 @@ export default class UserSystem {
   }
 
   // ===================================
-  // حالة البوت
+  // وضع البوت
   // ===================================
+  isBotMode() {
+    return BOT_MODE;
+  }
+
+  setBotMode(mode) {
+    if (!['auto', 'manual', 'off'].includes(mode)) return;
+    BOT_MODE = mode;
+    const labels = {
+      auto: '🟢 آلي',
+      manual: '🟡 يدوي',
+      off: '🔴 إيقاف'
+    };
+    console.log(`🤖 وضع البوت: ${labels[mode]}`);
+  }
+
+  // ✅ للتوافق مع القديم
   isBotPaused() {
-    return BOT_PAUSED;
+    return BOT_MODE === 'off';
   }
 
   setBotPaused(value) {
-    BOT_PAUSED = value;
-    console.log(`🤖 حالة البوت: ${value ? 'متوقف' : 'يعمل'}`);
+    BOT_MODE = value ? 'off' : 'auto';
   }
 
   // ===================================
-  // توليد ID الجديد (R_000 → R_999 → I_000 ...)
+  // توليد ID الجديد
   // ===================================
   async generateUserId() {
     let counter = await Counter.findOne({ _id: 'userId' });
@@ -38,10 +53,8 @@ export default class UserSystem {
       return 'R_000';
     }
 
-    // ✅ زيادة الرقم
     counter.seq += 1;
 
-    // ✅ إذا وصل 1000 → ننتقل للحرف التالي
     if (counter.seq > 999) {
       const currentIdx = LETTERS.indexOf(counter.letter);
       if (currentIdx === -1) {
@@ -77,18 +90,14 @@ export default class UserSystem {
     let userId;
     const rootAdminPlatformId = (process.env.ADMIN_PLATFORM_ID || '').trim();
 
-    // ✅ هل هذا هو الأدمن الرئيسي؟
     const isRootAdmin = rootAdminPlatformId && rootAdminPlatformId === platformId;
 
     if (isRootAdmin) {
-      // البحث عن R_000
       const rootExists = await User.findOne({ userId: 'R_000' });
       userId = rootExists ? await this.generateUserId() : 'R_000';
     } else {
-      // ✅ هل R_000 موجود؟
       const rootExists = await User.findOne({ userId: 'R_000' });
       if (!rootExists && !rootAdminPlatformId) {
-        // أول لاعب = الأدمن الرئيسي
         const userCount = await User.countDocuments();
         userId = userCount === 0 ? 'R_000' : await this.generateUserId();
       } else {
@@ -128,12 +137,10 @@ export default class UserSystem {
     if (!userId) return null;
     const clean = userId.trim().toUpperCase().replace(/-/g, '_');
 
-    // ✅ إذا كان بالصيغة R_001
     if (/^[A-Z]_\d+$/.test(clean)) {
       return await User.findOne({ userId: clean });
     }
 
-    // ✅ إذا كان بالصيغة R001
     const compactMatch = clean.match(/^([A-Z])(\d+)$/);
     if (compactMatch) {
       const letter = compactMatch[1];
@@ -144,17 +151,14 @@ export default class UserSystem {
     return null;
   }
 
-  // ✅ بحث ذكي
   async findByIdentifier(input) {
     if (!input) return null;
     const clean = input.trim().toUpperCase().replace(/-/g, '_');
 
-    // R_001
     if (/^[A-Z]_\d+$/.test(clean)) {
       let user = await User.findOne({ userId: clean });
       if (user) return user;
 
-      // جرّب padding
       const [letter, num] = clean.split('_');
       const padded = num.padStart(3, '0');
       user = await User.findOne({ userId: `${letter}_${padded}` });
@@ -162,7 +166,6 @@ export default class UserSystem {
       return null;
     }
 
-    // R001
     const compactMatch = clean.match(/^([A-Z])(\d+)$/);
     if (compactMatch) {
       const letter = compactMatch[1];
@@ -170,7 +173,6 @@ export default class UserSystem {
       return await User.findOne({ userId: `${letter}_${num}` });
     }
 
-    // أرقام فقط → نحتاج الحرف
     if (/^\d+$/.test(clean)) {
       return { needsLetter: true, number: clean };
     }
@@ -323,7 +325,7 @@ export default class UserSystem {
     if (user.isMainAdmin) return { error: '❌ هو أدمن رئيسي بالفعل' };
 
     user.isMainAdmin = true;
-    user.isAdmin = false;  // رفع المستوى
+    user.isAdmin = false;
     await user.save();
     return {
       success: true,

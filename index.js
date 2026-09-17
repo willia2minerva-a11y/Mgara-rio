@@ -207,7 +207,6 @@ app.get('/gateway', (req, res) => {
   res.json(gateway.getStats());
 });
 
-// ✅ إحصائيات عامة (بدون كلمة سر)
 app.get('/public/stats', async (req, res) => {
   try {
     const totalUsers = await User.countDocuments();
@@ -224,10 +223,9 @@ app.get('/public/stats', async (req, res) => {
 });
 
 // ===================================
-// ✅ Admin Endpoints (تحتاج كلمة سر)
+// ✅ Admin Endpoints
 // ===================================
 
-// ✅ حذف كل شيء
 app.get('/admin/reset/:secret', async (req, res) => {
   if (req.params.secret !== RESET_SECRET) {
     return res.status(403).json({ error: '❌ ممنوع' });
@@ -246,7 +244,6 @@ app.get('/admin/reset/:secret', async (req, res) => {
   }
 });
 
-// ✅ حذف كل شيء ما عدا الأدمن + المنتجات + الأكواد
 app.get('/admin/shadow/:secret', async (req, res) => {
   if (req.params.secret !== RESET_SECRET) {
     return res.status(403).json({ error: '❌ ممنوع' });
@@ -265,37 +262,88 @@ app.get('/admin/shadow/:secret', async (req, res) => {
   }
 });
 
-// ✅ إيقاف البوت
 app.get('/admin/pause/:secret', (req, res) => {
   if (req.params.secret !== RESET_SECRET) {
     return res.status(403).json({ error: '❌ ممنوع' });
   }
 
   if (userSystem) {
-    userSystem.setBotPaused(true);
-    console.log('⏸️ [ENDPOINT] تم إيقاف البوت');
-    res.json({ success: true, message: '⏸️ تم إيقاف البوت' });
+    userSystem.setBotMode('off');
+    console.log('🔴 [ENDPOINT] تم التحويل لوضع الإيقاف');
+    res.json({ success: true, message: '🔴 تم التحويل لوضع الإيقاف' });
   } else {
     res.status(500).json({ error: 'الأنظمة غير جاهزة' });
   }
 });
 
-// ✅ تشغيل البوت
 app.get('/admin/resume/:secret', (req, res) => {
   if (req.params.secret !== RESET_SECRET) {
     return res.status(403).json({ error: '❌ ممنوع' });
   }
 
   if (userSystem) {
-    userSystem.setBotPaused(false);
-    console.log('▶️ [ENDPOINT] تم تشغيل البوت');
-    res.json({ success: true, message: '▶️ تم تشغيل البوت' });
+    userSystem.setBotMode('auto');
+    console.log('🟢 [ENDPOINT] تم التحويل للوضع الآلي');
+    res.json({ success: true, message: '🟢 تم التحويل للوضع الآلي' });
   } else {
     res.status(500).json({ error: 'الأنظمة غير جاهزة' });
   }
 });
 
-// ✅ إحصائيات كاملة (للأدمن)
+// ✅ الوضع الآلي
+app.get('/admin/mode/auto/:secret', (req, res) => {
+  if (req.params.secret !== RESET_SECRET) {
+    return res.status(403).json({ error: '❌ ممنوع' });
+  }
+  if (userSystem) {
+    userSystem.setBotMode('auto');
+    console.log('🟢 [ENDPOINT] وضع آلي');
+    res.json({ success: true, mode: 'auto', message: '🟢 الوضع الآلي' });
+  } else {
+    res.status(500).json({ error: 'الأنظمة غير جاهزة' });
+  }
+});
+
+// ✅ الوضع اليدوي
+app.get('/admin/mode/manual/:secret', (req, res) => {
+  if (req.params.secret !== RESET_SECRET) {
+    return res.status(403).json({ error: '❌ ممنوع' });
+  }
+  if (userSystem) {
+    userSystem.setBotMode('manual');
+    console.log('🟡 [ENDPOINT] وضع يدوي');
+    res.json({ success: true, mode: 'manual', message: '🟡 الوضع اليدوي' });
+  } else {
+    res.status(500).json({ error: 'الأنظمة غير جاهزة' });
+  }
+});
+
+// ✅ وضع الإيقاف
+app.get('/admin/mode/off/:secret', (req, res) => {
+  if (req.params.secret !== RESET_SECRET) {
+    return res.status(403).json({ error: '❌ ممنوع' });
+  }
+  if (userSystem) {
+    userSystem.setBotMode('off');
+    console.log('🔴 [ENDPOINT] وضع إيقاف');
+    res.json({ success: true, mode: 'off', message: '🔴 وضع الإيقاف' });
+  } else {
+    res.status(500).json({ error: 'الأنظمة غير جاهزة' });
+  }
+});
+
+// ✅ عرض الوضع الحالي
+app.get('/admin/mode/:secret', (req, res) => {
+  if (req.params.secret !== RESET_SECRET) {
+    return res.status(403).json({ error: '❌ ممنوع' });
+  }
+  if (userSystem) {
+    res.json({ success: true, mode: userSystem.isBotMode() });
+  } else {
+    res.status(500).json({ error: 'الأنظمة غير جاهزة' });
+  }
+});
+
 app.get('/admin/stats/:secret', async (req, res) => {
   if (req.params.secret !== RESET_SECRET) {
     return res.status(403).json({ error: '❌ ممنوع' });
@@ -310,6 +358,7 @@ app.get('/admin/stats/:secret', async (req, res) => {
 
     res.json({
       success: true,
+      botMode: userSystem.isBotMode(),
       stats,
       topPlayers
     });
@@ -352,14 +401,11 @@ async function resetAll() {
 async function resetShadow() {
   const counts = { users: 0, kept: 0 };
 
-  // ✅ نحتفظ بالأدمن الرئيسي R_000
   const result = await User.deleteMany({
     userId: { $ne: 'R_000' }
   });
   counts.users = result.deletedCount;
   counts.kept = await User.countDocuments();
-
-  // ✅ لا نحذف: counters, codes, shopitems, archives, logs
 
   return counts;
 }
@@ -406,10 +452,10 @@ async function main() {
       console.log('');
       console.log('🔗 Endpoints:');
       console.log(`   GET /public/stats`);
+      console.log(`   GET /admin/mode/auto/${RESET_SECRET}`);
+      console.log(`   GET /admin/mode/manual/${RESET_SECRET}`);
+      console.log(`   GET /admin/mode/off/${RESET_SECRET}`);
       console.log(`   GET /admin/reset/${RESET_SECRET}`);
-      console.log(`   GET /admin/shadow/${RESET_SECRET}`);
-      console.log(`   GET /admin/pause/${RESET_SECRET}`);
-      console.log(`   GET /admin/resume/${RESET_SECRET}`);
       console.log(`   GET /admin/stats/${RESET_SECRET}`);
     });
   } catch (error) {

@@ -1,5 +1,5 @@
 // systems/GameSystem.js
-import { today } from '../utils/helpers.js';
+import { today, normalizeArabic } from '../utils/helpers.js';
 import ActiveGame from '../models/ActiveGame.js';
 import HangmanGame from './games/HangmanGame.js';
 import MathGame from './games/MathGame.js';
@@ -110,21 +110,20 @@ export default class GameSystem {
   }
 
   // ===================================
-  // ✅ حل الأسماء الكاملة → المفتاح
+  // ✅ حل الأسماء (بالهمزات وال "ال")
   // ===================================
   resolveGameKey(input) {
     if (!input) return null;
     const clean = input.trim();
+    const normalized = normalizeArabic(clean);
 
     // مباشر
     if (GAMES[clean]) return clean;
 
     // بحث ذكي
     for (const [key, game] of Object.entries(GAMES)) {
-      if (game.name === clean) return key;
-      if (game.name.replace(/\s+/g, '_') === clean) return key;
-      if (game.name.replace(/^ال/, '') === clean) return key;
-      if (key === clean.replace(/^ال/, '')) return key;
+      if (normalizeArabic(key) === normalized) return key;
+      if (normalizeArabic(game.name) === normalized) return key;
     }
 
     return null;
@@ -168,7 +167,7 @@ export default class GameSystem {
   }
 
   // ===================================
-  // فحص إمكانية اللعب
+  // فحص الإمكانية
   // ===================================
   async canPlay(user, gameKey) {
     const game = GAMES[gameKey];
@@ -184,24 +183,25 @@ export default class GameSystem {
       return { error: `🔑 تحتاج شراء هذه اللعبة\n\nالسعر: ${game.price} ريو\n\nاكتب: سوق` };
     }
 
-    const todayStr = today();
-    const played = user.gamesPlayedToday?.get?.(gameKey);
-    if (played === todayStr) {
-      return { error: `🎮 لعبت "${game.name}" اليوم\n\nعد غدًا!` };
+    // ✅ الحد اليومي (إلا في وضع الاختبار)
+    if (!user.isTestMode) {
+      const todayStr = today();
+      const played = user.gamesPlayedToday?.get?.(gameKey);
+      if (played === todayStr) {
+        return { error: `🎮 لعبت "${game.name}" اليوم\n\nعد غدًا!` };
+      }
     }
 
     return { success: true, game };
   }
 
   // ===================================
-  // ✅ هل هناك لعبة نشطة؟
+  // هل هناك لعبة نشطة؟
   // ===================================
   async hasActiveGame(user) {
-    // فحص ActiveGame (اسئلة)
     const activeQuiz = await ActiveGame.findOne({ userId: user.userId });
     if (activeQuiz) return { type: 'quiz', key: 'اسئلة' };
 
-    // فحص gameSessions
     if (user.gameSessions && user.gameSessions.size > 0) {
       const now = Date.now();
       let modified = false;
@@ -231,32 +231,31 @@ export default class GameSystem {
   }
 
   // ===================================
-  // ✅ بدء لعبة
+  // بدء لعبة
   // ===================================
   async startGame(user, gameInput) {
-    // 1. حل الاسم
     const gameKey = this.resolveGameKey(gameInput);
     if (!gameKey) {
       return `❌ لعبة غير معروفة: ${gameInput}\n\nاكتب "العاب" للألعاب المتاحة`;
     }
 
-    // 2. فحص لعبة نشطة
     const active = await this.hasActiveGame(user);
     if (active) {
       const activeGame = GAMES[active.key];
       return `🎮 لديك لعبة نشطة: ${activeGame.icon} ${activeGame.name}\n\n💡 أنهها أولًا`;
     }
 
-    // 3. فحص الإمكانية
     const check = await this.canPlay(user, gameKey);
     if (check.error) return check.error;
 
     const game = check.game;
 
-    // 4. تسجيل اللعب اليومي
-    if (!user.gamesPlayedToday) user.gamesPlayedToday = new Map();
-    user.gamesPlayedToday.set(gameKey, today());
-    user.markModified('gamesPlayedToday');
+    // ✅ تسجيل اللعب (إلا في وضع الاختبار)
+    if (!user.isTestMode) {
+      if (!user.gamesPlayedToday) user.gamesPlayedToday = new Map();
+      user.gamesPlayedToday.set(gameKey, today());
+      user.markModified('gamesPlayedToday');
+    }
 
     if (!user.gameStats) user.gameStats = new Map();
     const stats = user.gameStats.get(gameKey) || { played: 0, won: 0 };
@@ -266,7 +265,6 @@ export default class GameSystem {
 
     await user.save();
 
-    // 5. بدء اللعبة
     if (gameKey === 'اسئلة') {
       return await this.millionaire.startQuiz(user, 'easy');
     }
@@ -286,13 +284,12 @@ export default class GameSystem {
   }
 
   // ===================================
-  // ✅ معالجة الإجابة
+  // معالجة الإجابة
   // ===================================
   async handleAnswer(user, gameKey, answer) {
     const game = GAMES[gameKey];
     if (!game) return { silent: true };
 
-    // اسئلة
     if (gameKey === 'اسئلة') {
       return await this.millionaire.handleAnswer(user, answer);
     }
@@ -307,7 +304,6 @@ export default class GameSystem {
     if (result.silent) return { silent: true };
     if (result.error) return result.error;
 
-    // تحديث/حذف الجلسة
     if (result.sessionData) {
       user.gameSessions.set(gameKey, result.sessionData);
     } else {
@@ -315,12 +311,10 @@ export default class GameSystem {
     }
     user.markModified('gameSessions');
 
-    // مكافآت
     if (result.reward && result.reward > 0) {
       await this.points.addRio(user, result.reward);
     }
 
-    // إحصائيات
     if (result.won) {
       const stats = user.gameStats.get(gameKey) || { played: 0, won: 0 };
       stats.won += 1;
@@ -341,4 +335,4 @@ export default class GameSystem {
 
     return { message: result.message };
   }
-      }
+}

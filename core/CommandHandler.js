@@ -219,7 +219,7 @@ export default class CommandHandler {
 
       // 🟡 يدوي: منع اللعب والشراء والهدية
       if (botMode === 'manual') {
-        const blocked = ['العب', 'اشتر', 'هدية'];
+        const blocked = ['العب', 'اشتر'];
         if (blocked.includes(cmd)) return null;
 
         // منع الإجابات أيضًا

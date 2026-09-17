@@ -14,26 +14,42 @@ const COMPOUND_COMMANDS = [
 ];
 
 const ALIASES = {
+  // بدء
   'مرحبا': 'بدء', 'اهلا': 'بدء', 'هلا': 'بدء', 'هاي': 'بدء',
   'السلام عليكم': 'بدء', 'hi': 'بدء', 'hello': 'بدء', 'start': 'بدء',
   'تفعيل': 'بدء', 'تشغيل': 'بدء', 'بداية': 'بدء',
 
+  // مساعدة
   'اوامر': 'مساعدة', 'الاوامر': 'مساعدة', 'help': 'مساعدة',
+
+  // أقسام
   'حساب': 'قسم_الحساب', 'الحساب': 'قسم_الحساب',
+
+  // السوق
   'متجر': 'سوق', 'المتجر': 'سوق', 'shop': 'سوق',
 
+  // الحساب
   'رصيدي': 'نقاطي', 'رصيد': 'نقاطي',
   'بروفايلي': 'ملفي', 'حسابي': 'ملفي',
   'id': 'معرفي',
   'افضل': 'توب', 'الافضل': 'توب',
+
+  // الفعاليات
   'هديتي': 'هدية', 'gift': 'هدية', 'daily': 'هدية',
-  'اشتري': 'اشتر', 'شراء': 'اشتر', 'شرا': 'اشتر', 'buy': 'اشتر',
   'redeem': 'كود', 'code': 'كود',
   'كودي': 'احالتي', 'referral': 'احالتي',
   'احالة': 'صديق',
+
+  // المهام
   'المهام': 'مهام', 'missions': 'مهام',
+
+  // الإدارة
   'الادمن': 'مدير', 'admin': 'مدير',
+
+  // المشتريات
   'مشتريات': 'مشترياتي', 'سجلي': 'مشترياتي',
+
+  // الألعاب
   'العاب': 'العاب', 'games': 'العاب'
 };
 
@@ -43,8 +59,13 @@ const LINKS = {
 };
 
 // ✅ أحرف/إجابات الألعاب
-const GAME_ANSWERS = ['أ', 'ا', 'ب', 'ج', 'د', '1', '2', '3', '4', 'a', 'b', 'c', 'd',
-                     'حجر', 'ورقة', 'مقص', 'صح', 'خطأ', 'خطا', 'نعم', 'لا'];
+const GAME_ANSWERS = [
+  'أ', 'ا', 'ب', 'ج', 'د',
+  '1', '2', '3', '4',
+  'a', 'b', 'c', 'd',
+  'حجر', 'ورقة', 'مقص',
+  'صح', 'خطأ', 'خطا', 'نعم', 'لا'
+];
 
 export default class CommandHandler {
   constructor(systems) {
@@ -69,6 +90,7 @@ export default class CommandHandler {
 
     const user = await this.userSystem.getOrCreate(sender.id, sender.platform);
 
+    // ✅ التجميد
     if (user.isFrozen) {
       const allowed = ['نقاطي', 'ملفي', 'مساعدة', 'توب', 'معرفي'];
       const firstWord = text.split(/\s+/)[0];
@@ -85,6 +107,7 @@ export default class CommandHandler {
     let cmd = parts[0];
     let args = parts.slice(1);
 
+    // ✅ الأوامر المركبة
     if (parts.length >= 2) {
       const twoWord = parts.slice(0, 2).join('_');
       if (COMPOUND_COMMANDS.includes(twoWord)) {
@@ -93,6 +116,7 @@ export default class CommandHandler {
       }
     }
 
+    // ✅ Aliases
     if (ALIASES[cmd]) cmd = ALIASES[cmd];
 
     try {
@@ -103,6 +127,7 @@ export default class CommandHandler {
       }
 
       switch (cmd) {
+        // ===== أساسية =====
         case 'بدء': return this._welcome(user);
         case 'مساعدة': return this._help(user);
         case 'قسم_الحساب': return this._sectionAccount();
@@ -116,94 +141,122 @@ export default class CommandHandler {
         case 'ملفي': return this._profile(user);
         case 'توب': return await this.leaderboard.top10();
 
-        case 'العاب': return this.gameSystem.listGames(user, false);
+        // ===== الألعاب =====
+        case 'العاب':
+          return this.gameSystem.listGames(user);
 
         case 'العب': {
-          if (!args[0]) return this.gameSystem.listGames(user, true);
+          if (!args[0]) return this.gameSystem.listGames(user);
           return await this.gameSystem.startGame(user, args[0]);
         }
 
+        // ===== المساعدات =====
         case '50': case '50:50':
           return await this._handleFifty(user);
         case 'تخطي':
           return await this._handleSkip(user);
 
+        // ===== الفعاليات =====
         case 'هدية': return await this._handleGift(user);
         case 'كود': return await this._handleCode(user, args);
         case 'احالتي': return await this.referral.showCode(user);
         case 'صديق': return await this._handleReferral(user, args);
+
+        // ===== السوق =====
         case 'سوق': return await this.shop.showShop(user);
         case 'اشتر': return await this._handleBuy(user, args);
         case 'مشترياتي': return this._purchases(user);
+
+        // ===== المهام =====
         case 'مهام': return await this.missions.show(user);
 
-        // ✅ اسم مخصص
+        // ===== الاسم والديكور =====
         case 'اسمي':
           return await this._handleSetName(user, args);
         case 'ديكوري':
           return await this._handleSetBadge(user, args);
 
-        // أوامر الأدمن
+        // ===== أوامر الأدمن =====
         case 'اضف_نقاط': case 'اضف_ريو':
           if (!this.admin.isAdmin(user)) return null;
           return await this.admin.addPoints(user, args[0], parseInt(args[1]));
+
         case 'خصم_نقاط': case 'خصم_ريو':
           if (!this.admin.isAdmin(user)) return null;
           return await this.admin.removePoints(user, args[0], parseInt(args[1]));
+
         case 'عدل_نقاط':
           if (!this.admin.isAdmin(user)) return null;
           return await this.admin.setPoints(user, args[0], parseInt(args[1]));
+
         case 'تجميد':
           if (!this.admin.isAdmin(user)) return null;
           return await this.admin.freeze(user, args[0]);
+
         case 'فك_تجميد':
           if (!this.admin.isAdmin(user)) return null;
           return await this.admin.unfreeze(user, args[0]);
+
         case 'حذف':
           if (!this.admin.isAdmin(user)) return null;
           return await this.admin.deleteUser(user, args[0]);
+
         case 'عرض_لاعب':
           if (!this.admin.isAdmin(user)) return null;
           return await this.admin.showPlayer(args[0]);
+
         case 'عرض_اللاعبين':
           if (!this.admin.isAdmin(user)) return null;
           return await this.admin.listPlayers(parseInt(args[0]) || 1);
+
         case 'عرض_المجمدين':
           if (!this.admin.isAdmin(user)) return null;
           return await this.admin.listFrozen();
+
         case 'عرض_الاكواد':
           if (!this.admin.isAdmin(user)) return null;
           return await this.codes.listAll();
+
         case 'عرض_المنتجات':
           if (!this.admin.isAdmin(user)) return null;
           return await this.shop.listAll();
+
         case 'احصائيات':
           if (!this.admin.isAdmin(user)) return null;
           return await this.admin.stats();
+
         case 'اضف_منتج':
           if (!this.admin.isAdmin(user)) return null;
           return await this._handleAddProduct(user, args);
+
         case 'حذف_منتج':
           if (!this.admin.isAdmin(user)) return null;
           return (await this.shop.removeItem(args.join(' '))).message || null;
+
         case 'عدل_منتج':
           if (!this.admin.isAdmin(user)) return null;
           return (await this.shop.editItem(args[0], args[1], args.slice(2).join(' '))).message || null;
+
         case 'اضف_دولاب':
           if (!this.admin.isAdmin(user)) return null;
           return await this._handleAddWheel(user, args);
+
         case 'اضف_كود':
           if (!this.admin.isAdmin(user)) return null;
           return (await this.codes.create(args[0], parseInt(args[1]), parseInt(args[2]), user.userId)).message || null;
+
         case 'حذف_كود':
           if (!this.admin.isAdmin(user)) return null;
           return (await this.codes.remove(args[0])).message || null;
+
         case 'اعطي_ادمن':
           if (!this.admin.isAdmin(user)) return null;
           return await this.admin.promote(user, args[0]);
+
         case 'ازل_ادمن':
           if (!this.admin.isAdmin(user)) return null;
           return await this.admin.demote(user, args[0]);
+
         case 'رسالة': {
           if (!this.admin.isAdmin(user)) return null;
           const res = await this.admin.sendMessage(user, args[0], args.slice(1).join(' '));
@@ -215,31 +268,38 @@ export default class CommandHandler {
           return null;
       }
     } catch (error) {
-      console.error('❌ خطأ:', error.message);
+      console.error('❌ خطأ في معالجة الأمر:', error.message);
       return null;
     }
   }
 
   // ===================================
-  // معالجة إجابة لعبة نشطة
+  // ✅ معالجة إجابة لعبة نشطة
   // ===================================
   async _handleGameAnswer(user, text) {
-    // اسئلة لها نظام خاص
-    const activeKey = await this.gameSystem.getActiveGameKey(user);
-    if (!activeKey && !(await this.gameSystem.hasActiveGame(user))) {
-      // لا لعبة نشطة
-      return null;
-    }
+    // فحص اللعبة النشطة
+    const active = await this.gameSystem.hasActiveGame(user);
+    if (!active) return null;
 
-    const key = activeKey;
-    const result = await this.gameSystem.handleAnswer(user, key, text);
+    const result = await this.gameSystem.handleAnswer(user, active.key, text);
     if (result.silent) return null;
     if (result.error) return result.error;
+
+    // معالجة إضافية
+    try {
+      if (user.gamesPlayed === 1 && user.referredBy) {
+        await this.referral.completeReferral(user);
+      }
+      await this.missions.track(user, 'gamesPlayed');
+      await this.missions.check(user);
+      await this.achievements.checkRioAchievements(user);
+    } catch (e) {}
+
     return result.message;
   }
 
   // ===================================
-  // الرسائل
+  // الرسائل الأساسية
   // ===================================
   _welcome(user) {
     if (user.isAdmin) {
@@ -365,6 +425,9 @@ export default class CommandHandler {
     return msg;
   }
 
+  // ===================================
+  // الفعاليات
+  // ===================================
   async _handleGift(user) {
     const result = await this.dailyGift.claim(user);
     if (result.error) return result.error;
@@ -427,6 +490,9 @@ export default class CommandHandler {
     return null;
   }
 
+  // ===================================
+  // السوق
+  // ===================================
   async _handleBuy(user, args) {
     if (!args[0]) {
       return `🛒 الشراء
@@ -463,7 +529,7 @@ export default class CommandHandler {
   }
 
   // ===================================
-  // ✅ الاسم المخصص
+  // الاسم المخصص
   // ===================================
   async _handleSetName(user, args) {
     if (!user.ownedBadges?.includes('اسم_مخصص')) {
@@ -516,7 +582,7 @@ export default class CommandHandler {
   }
 
   // ===================================
-  // ✅ اختيار الديكور
+  // اختيار الديكور
   // ===================================
   async _handleSetBadge(user, args) {
     const badges = user.ownedBadges || [];
@@ -554,6 +620,9 @@ export default class CommandHandler {
     return `✅ تم تفعيل: ${match.replace(/_/g, ' ')}`;
   }
 
+  // ===================================
+  // إضافة منتج (أدمن)
+  // ===================================
   async _handleAddProduct(admin, args) {
     if (args.length < 4) {
       return `❌ الاستخدام: اضف_منتج [الاسم] [السعر] [الكمية] [الوصف]
@@ -570,6 +639,9 @@ export default class CommandHandler {
     return result.message || result.error;
   }
 
+  // ===================================
+  // إضافة دولاب (أدمن)
+  // ===================================
   async _handleAddWheel(admin, args) {
     if (args.length < 3) {
       return `❌ الاستخدام: اضف_دولاب [الاسم] [السعر] [الجوائز]
@@ -610,4 +682,4 @@ export default class CommandHandler {
     });
     return msg;
   }
-  }
+              }

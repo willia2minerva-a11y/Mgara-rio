@@ -27,6 +27,7 @@ import ArchiveSystem from './systems/ArchiveSystem.js';
 const MONGODB_URI = process.env.MONGODB_URI;
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
+const RESET_SECRET = process.env.RESET_SECRET || 'mgara-reset-2026';
 const PORT = process.env.PORT || 3000;
 
 if (!MONGODB_URI || !PAGE_ACCESS_TOKEN) {
@@ -40,6 +41,7 @@ app.use(express.urlencoded({ extended: true }));
 
 let commandHandler = null;
 let telegramBot = null;
+let userSystem = null;
 
 // ===================================
 // Gateway
@@ -86,7 +88,7 @@ async function connectDB() {
 // Systems
 // ===================================
 function initSystems() {
-  const userSystem = new UserSystem();
+  userSystem = new UserSystem();
   const pointsSystem = new PointsSystem();
   const achievementSystem = new AchievementSystem(pointsSystem);
   const dailyGift = new DailyGiftSystem(pointsSystem, achievementSystem);
@@ -195,7 +197,7 @@ app.post('/webhook', async (req, res) => {
 });
 
 // ===================================
-// Endpoints
+// Public Endpoints
 // ===================================
 app.get('/', (req, res) => {
   res.json({ status: '✅', name: '🏔️ مغارة ريو', version: '2.0.0' });
@@ -204,6 +206,163 @@ app.get('/', (req, res) => {
 app.get('/gateway', (req, res) => {
   res.json(gateway.getStats());
 });
+
+// ✅ إحصائيات عامة (بدون كلمة سر)
+app.get('/public/stats', async (req, res) => {
+  try {
+    const totalUsers = await User.countDocuments();
+    const activeUsers = await User.countDocuments({ isFrozen: false });
+    res.json({
+      success: true,
+      players: totalUsers,
+      active: activeUsers,
+      updatedAt: new Date().toISOString()
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ===================================
+// ✅ Admin Endpoints (تحتاج كلمة سر)
+// ===================================
+
+// ✅ حذف كل شيء
+app.get('/admin/reset/:secret', async (req, res) => {
+  if (req.params.secret !== RESET_SECRET) {
+    return res.status(403).json({ error: '❌ ممنوع' });
+  }
+
+  try {
+    const result = await resetAll();
+    console.log(`🗑️ [ENDPOINT] تم حذف كل شيء — ${result.users} لاعب`);
+    res.json({
+      success: true,
+      message: '✅ تم حذف كل شيء',
+      deleted: result
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ✅ حذف كل شيء ما عدا الأدمن + المنتجات + الأكواد
+app.get('/admin/shadow/:secret', async (req, res) => {
+  if (req.params.secret !== RESET_SECRET) {
+    return res.status(403).json({ error: '❌ ممنوع' });
+  }
+
+  try {
+    const result = await resetShadow();
+    console.log(`🗑️ [ENDPOINT] shadow — ${result.users} لاعب، أبقى ${result.kept}`);
+    res.json({
+      success: true,
+      message: '✅ تم الحذف مع الإبقاء على الأدمن',
+      deleted: result
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ✅ إيقاف البوت
+app.get('/admin/pause/:secret', (req, res) => {
+  if (req.params.secret !== RESET_SECRET) {
+    return res.status(403).json({ error: '❌ ممنوع' });
+  }
+
+  if (userSystem) {
+    userSystem.setBotPaused(true);
+    console.log('⏸️ [ENDPOINT] تم إيقاف البوت');
+    res.json({ success: true, message: '⏸️ تم إيقاف البوت' });
+  } else {
+    res.status(500).json({ error: 'الأنظمة غير جاهزة' });
+  }
+});
+
+// ✅ تشغيل البوت
+app.get('/admin/resume/:secret', (req, res) => {
+  if (req.params.secret !== RESET_SECRET) {
+    return res.status(403).json({ error: '❌ ممنوع' });
+  }
+
+  if (userSystem) {
+    userSystem.setBotPaused(false);
+    console.log('▶️ [ENDPOINT] تم تشغيل البوت');
+    res.json({ success: true, message: '▶️ تم تشغيل البوت' });
+  } else {
+    res.status(500).json({ error: 'الأنظمة غير جاهزة' });
+  }
+});
+
+// ✅ إحصائيات كاملة (للأدمن)
+app.get('/admin/stats/:secret', async (req, res) => {
+  if (req.params.secret !== RESET_SECRET) {
+    return res.status(403).json({ error: '❌ ممنوع' });
+  }
+
+  try {
+    const stats = await userSystem.getStats();
+    const topPlayers = await User.find()
+      .sort({ totalEarned: -1 })
+      .limit(5)
+      .select('userId rio totalEarned level');
+
+    res.json({
+      success: true,
+      stats,
+      topPlayers
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ===================================
+// Reset Functions
+// ===================================
+async function resetAll() {
+  const counts = {};
+
+  counts.users = (await User.deleteMany({})).deletedCount;
+
+  try {
+    const Counter = (await import('./models/Counter.js')).default;
+    counts.counters = (await Counter.deleteMany({})).deletedCount;
+  } catch (e) { counts.counters = 0; }
+
+  try {
+    const Archive = (await import('./models/Archive.js')).default;
+    counts.archives = (await Archive.deleteMany({})).deletedCount;
+  } catch (e) { counts.archives = 0; }
+
+  try {
+    const TransactionLog = (await import('./models/TransactionLog.js')).default;
+    counts.logs = (await TransactionLog.deleteMany({})).deletedCount;
+  } catch (e) { counts.logs = 0; }
+
+  try {
+    const ActiveGame = (await import('./models/ActiveGame.js')).default;
+    counts.activeGames = (await ActiveGame.deleteMany({})).deletedCount;
+  } catch (e) { counts.activeGames = 0; }
+
+  return counts;
+}
+
+async function resetShadow() {
+  const counts = { users: 0, kept: 0 };
+
+  // ✅ نحتفظ بالأدمن الرئيسي R_000
+  const result = await User.deleteMany({
+    userId: { $ne: 'R_000' }
+  });
+  counts.users = result.deletedCount;
+  counts.kept = await User.countDocuments();
+
+  // ✅ لا نحذف: counters, codes, shopitems, archives, logs
+
+  return counts;
+}
 
 // ===================================
 // Telegram Bot
@@ -244,6 +403,14 @@ async function main() {
     app.listen(PORT, () => {
       console.log(`✅ يعمل على المنفذ ${PORT}`);
       console.log('📱 جاهز');
+      console.log('');
+      console.log('🔗 Endpoints:');
+      console.log(`   GET /public/stats`);
+      console.log(`   GET /admin/reset/${RESET_SECRET}`);
+      console.log(`   GET /admin/shadow/${RESET_SECRET}`);
+      console.log(`   GET /admin/pause/${RESET_SECRET}`);
+      console.log(`   GET /admin/resume/${RESET_SECRET}`);
+      console.log(`   GET /admin/stats/${RESET_SECRET}`);
     });
   } catch (error) {
     console.error('❌ فشل البدء:', error);

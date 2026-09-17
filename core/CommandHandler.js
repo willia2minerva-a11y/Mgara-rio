@@ -13,7 +13,8 @@ const COMPOUND_COMMANDS = [
   'اضف_دولاب', 'حذف_دولاب',
   'منح_ادمن', 'منح_ادمن_رئيسي', 'ازل_ادمن',
   'ايقاف_البوت', 'تشغيل_البوت',
-  'حذف_الكل'
+  'حذف_الكل',
+  'وضع_الي', 'وضع_يدوي', 'وضع_ايقاف'
 ];
 
 const ALIASES = {
@@ -69,7 +70,18 @@ const ALIASES = {
   'ازالة_ادمن': 'ازل_ادمن', 'تنزيل': 'ازل_ادمن',
 
   // حذف الكل
-  'تصفير': 'حذف_الكل', 'reset': 'حذف_الكل'
+  'تصفير': 'حذف_الكل', 'reset': 'حذف_الكل',
+
+  // أوضاع البوت
+  'وضع_آلي': 'وضع_الي',
+  'وضع_الي': 'وضع_الي',
+  'آلي': 'وضع_الي',
+  'تلقائي': 'وضع_الي',
+  'وضع_يدوي': 'وضع_يدوي',
+  'يدوي': 'وضع_يدوي',
+  'وضع_ايقاف': 'وضع_ايقاف',
+  'ايقاف_كامل': 'وضع_ايقاف',
+  'صيانة': 'وضع_ايقاف'
 };
 
 const LINKS = {
@@ -124,20 +136,46 @@ export default class CommandHandler {
     if (ALIASES[cmd]) cmd = ALIASES[cmd];
 
     // ===================================
-    // ✅ أوامر البوت الحساسة (قبل كل شيء)
+    // ✅ أوامر البوت الحساسة (قبل أي شيء)
     // ===================================
-    if (['ايقاف_البوت', 'تشغيل_البوت', 'حذف_الكل'].includes(cmd)) {
+    if (['ايقاف_البوت', 'تشغيل_البوت', 'حذف_الكل',
+         'وضع_الي', 'وضع_يدوي', 'وضع_ايقاف', 'وضعي'].includes(cmd)) {
       const admin = await this.userSystem.getOrCreate(sender.id, sender.platform);
       if (!this.admin.isMainAdmin(admin)) return null;
 
       if (cmd === 'ايقاف_البوت') {
-        this.userSystem.setBotPaused(true);
-        return '⏸️ تم إيقاف البوت\n\n💡 التسجيل الجديد ما زال يعمل';
+        this.userSystem.setBotMode('off');
+        return '🔴 تم التحويل لوضع الإيقاف\n\n💡 اللاعبون: تسجيل فقط\n💡 أنت: كل الأوامر تعمل';
       }
 
       if (cmd === 'تشغيل_البوت') {
-        this.userSystem.setBotPaused(false);
-        return '▶️ تم تشغيل البوت';
+        this.userSystem.setBotMode('auto');
+        return '🟢 تم التحويل للوضع الآلي\n\n💡 كل الأوامر تعمل';
+      }
+
+      if (cmd === 'وضع_الي') {
+        this.userSystem.setBotMode('auto');
+        return '🟢 تم التحويل للوضع الآلي';
+      }
+
+      if (cmd === 'وضع_يدوي') {
+        this.userSystem.setBotMode('manual');
+        return '🟡 تم التحويل للوضع اليدوي\n\n💡 اللاعبون: عرض فقط (بدون لعب/شراء)';
+      }
+
+      if (cmd === 'وضع_ايقاف') {
+        this.userSystem.setBotMode('off');
+        return '🔴 تم التحويل لوضع الإيقاف\n\n💡 اللاعبون: تسجيل فقط';
+      }
+
+      if (cmd === 'وضعي') {
+        const mode = this.userSystem.isBotMode();
+        const labels = {
+          auto: '🟢 آلي',
+          manual: '🟡 يدوي',
+          off: '🔴 إيقاف'
+        };
+        return `🤖 وضع البوت الحالي: ${labels[mode]}`;
       }
 
       if (cmd === 'حذف_الكل') {
@@ -155,7 +193,6 @@ export default class CommandHandler {
         const count = await User.countDocuments();
         await User.deleteMany({});
 
-        // حذف الأرشفة أيضًا
         try {
           const Archive = (await import('../models/Archive.js')).default;
           await Archive.deleteMany({});
@@ -166,22 +203,36 @@ export default class CommandHandler {
     }
 
     // ===================================
-    // ✅ فحص الإيقاف
+    // ✅ فحص الوضع
     // ===================================
-    const paused = this.userSystem.isBotPaused();
+    const botMode = this.userSystem.isBotMode();
     const user = await this.userSystem.getOrCreate(sender.id, sender.platform);
+    const userIsAdmin = this.admin.isAnyAdmin(user);
 
-    if (paused) {
-      const allowed = ['بدء', 'مساعدة', 'معرفي'];
-      if (!allowed.includes(cmd)) {
-        return null;
+    // ✅ غير الأدمن: قيود حسب الوضع
+    if (!userIsAdmin) {
+      // 🔴 إيقاف: بدء فقط
+      if (botMode === 'off') {
+        const allowed = ['بدء'];
+        if (!allowed.includes(cmd)) return null;
+      }
+
+      // 🟡 يدوي: منع اللعب والشراء والهدية
+      if (botMode === 'manual') {
+        const blocked = ['العب', 'اشتر', 'هدية'];
+        if (blocked.includes(cmd)) return null;
+
+        // منع الإجابات أيضًا
+        if (GAME_ANSWERS.includes(cmd) || ['حجر', 'ورقة', 'مقص'].includes(parts[0])) {
+          return null;
+        }
       }
     }
 
     // ===================================
     // ✅ التجميد
     // ===================================
-    if (user.isFrozen) {
+    if (user.isFrozen && !userIsAdmin) {
       const allowed = ['نقاطي', 'ملفي', 'مساعدة', 'توب', 'معرفي'];
       const firstWord = parts[0];
       if (!allowed.includes(firstWord)) {
@@ -254,22 +305,18 @@ export default class CommandHandler {
         // 👑 أوامر الأدمن
         // ===================================
 
-        // ✅ إضافة نقاط (كل الأدمن)
         case 'اضف_نقاط': case 'اضف_ريو':
           if (!this.admin.isAnyAdmin(user)) return null;
           return await this.admin.addPoints(user, args);
 
-        // ✅ خصم نقاط (أدمن رئيسي فقط)
         case 'خصم_نقاط': case 'خصم_ريو':
           if (!this.admin.isMainAdmin(user)) return null;
           return await this.admin.removePoints(user, args);
 
-        // ✅ حالة لاعب
         case 'حالة':
           if (!this.admin.isAnyAdmin(user)) return null;
           return await this.admin.showPlayer(args[0]);
 
-        // ✅ تجميد
         case 'تجميد':
           if (!this.admin.isMainAdmin(user)) return null;
           return await this.admin.freeze(user, args);
@@ -282,7 +329,6 @@ export default class CommandHandler {
           if (!this.admin.isMainAdmin(user)) return null;
           return await this.admin.deleteUser(user, args);
 
-        // ✅ عرض
         case 'عرض_لاعب':
           if (!this.admin.isAnyAdmin(user)) return null;
           return await this.admin.showPlayer(args[0]);
@@ -307,7 +353,6 @@ export default class CommandHandler {
           if (!this.admin.isAnyAdmin(user)) return null;
           return await this.admin.stats(user);
 
-        // ✅ المنتجات
         case 'اضف_منتج':
           if (!this.admin.isAnyAdmin(user)) return null;
           return await this._handleAddProduct(user, args);
@@ -320,12 +365,10 @@ export default class CommandHandler {
           if (!this.admin.isAnyAdmin(user)) return null;
           return (await this.shop.editItem(args[0], args[1], args.slice(2).join(' '))).message || null;
 
-        // ✅ الدولاب
         case 'اضف_دولاب':
           if (!this.admin.isAnyAdmin(user)) return null;
           return await this._handleAddWheel(user, args);
 
-        // ✅ الأكواد
         case 'اضف_كود':
           if (!this.admin.isAnyAdmin(user)) return null;
           return (await this.codes.create(args[0], parseInt(args[1]), parseInt(args[2]), user.userId)).message || null;
@@ -334,7 +377,6 @@ export default class CommandHandler {
           if (!this.admin.isAnyAdmin(user)) return null;
           return (await this.codes.remove(args[0])).message || null;
 
-        // ✅ صلاحيات
         case 'منح_ادمن':
           if (!this.admin.isMainAdmin(user)) return null;
           return await this.admin.promoteToAdmin(user, args);
@@ -347,17 +389,14 @@ export default class CommandHandler {
           if (!this.admin.isRootAdmin(user)) return null;
           return await this.admin.demoteAdmin(user, args);
 
-        // ✅ سجل
         case 'سجل':
           if (!this.admin.isRootAdmin(user)) return null;
           return await this._handleLog(args);
 
-        // ✅ أرشيف
         case 'ارشيف':
           if (!this.admin.isRootAdmin(user)) return null;
           return await this._handleArchive(args);
 
-        // ✅ رسالة
         case 'رسالة': {
           if (!this.admin.isMainAdmin(user)) return null;
           const res = await this.admin.sendMessage(user, args);
@@ -366,7 +405,6 @@ export default class CommandHandler {
           return res;
         }
 
-        // ✅ وضع الاختبار
         case 'تجربة':
           if (!this.admin.isMainAdmin(user)) return null;
           return await this._handleToggleTest(user, args);
@@ -407,13 +445,6 @@ export default class CommandHandler {
   // ✅ سجل [حرف] [رقم] [صفحة]
   // ===================================
   async _handleLog(args) {
-    // سجل              → عرض مساعدة
-    // سجل R            → أرشيف R كامل
-    // سجل R 1          → أرشيف R1
-    // سجل R 1 2        → أرشيف R1 صفحة 2
-    // سجل اليوم        → سجل اليوم
-    // سجل R_001        → سجل لاعب
-
     if (args.length === 0) {
       return `📋 السجل
 
@@ -433,19 +464,16 @@ export default class CommandHandler {
 
     const first = args[0];
 
-    // ✅ سجل اليوم
     if (normalizeArabic(first) === normalizeArabic('اليوم')) {
       return await this._showTodayLog();
     }
 
-    // ✅ سجل لاعب (ID)
     if (/^[A-Z]_\d+$/i.test(first) || /^[A-Z]\d+$/i.test(first)) {
       const target = await this.userSystem.findByIdentifier(first);
-      if (!target) return `❌ اللاعب غير موجود: ${first}`;
+      if (!target || target.needsLetter) return `❌ اللاعب غير موجود: ${first}`;
       return await this._showPlayerLog(target);
     }
 
-    // ✅ سجل أرشيف (حرف + رقم + صفحة)
     const letter = first.toUpperCase();
     if (!/^[A-Z]$/.test(letter)) {
       return `❌ حرف غير صالح: ${first}
@@ -459,7 +487,6 @@ export default class CommandHandler {
     const page = args[2] ? parseInt(args[2]) : 1;
 
     if (archiveIndex === null) {
-      // ✅ سجل R (كل أرشيفات R)
       return await this._showLetterArchives(letter);
     }
 
@@ -467,7 +494,6 @@ export default class CommandHandler {
     return await this._showArchiveLog(archiveId, page);
   }
 
-  // ✅ سجل اليوم
   async _showTodayLog() {
     const todayStr = today();
     const TransactionLog = (await import('../models/TransactionLog.js')).default;
@@ -494,7 +520,6 @@ export default class CommandHandler {
     return msg.trim();
   }
 
-  // ✅ سجل لاعب
   async _showPlayerLog(target) {
     const TransactionLog = (await import('../models/TransactionLog.js')).default;
 
@@ -522,7 +547,6 @@ export default class CommandHandler {
     return msg.trim();
   }
 
-  // ✅ أرشيف حرف
   async _showLetterArchives(letter) {
     const Archive = (await import('../models/Archive.js')).default;
     const archives = await Archive.find({ letter }).sort({ index: 1 });
@@ -541,10 +565,10 @@ export default class CommandHandler {
     return msg;
   }
 
-  // ✅ أرشيف محدد مع سجل
   async _showArchiveLog(archiveId, page) {
     const Archive = (await import('../models/Archive.js')).default;
     const TransactionLog = (await import('../models/TransactionLog.js')).default;
+    const User = (await import('../models/User.js')).default;
 
     const archive = await Archive.findOne({ archiveId });
     if (!archive) {
@@ -553,14 +577,12 @@ export default class CommandHandler {
 💡 اعرض القائمة: سجل ${archiveId[0]}`;
     }
 
-    // ✅ جلب جميع لاعبين الأرشيف
     const users = await User.find({
       userId: { $regex: new RegExp(`^${archive.letter}_`) }
     }).where('userId').gte(archive.fromId).lte(archive.toId);
 
     const userIds = users.map(u => u.userId);
 
-    // ✅ السجل
     const perPage = 20;
     const total = await TransactionLog.countDocuments({ targetId: { $in: userIds } });
     const totalPages = Math.ceil(total / perPage);
@@ -594,7 +616,6 @@ export default class CommandHandler {
     return msg.trim();
   }
 
-  // ✅ أرشيف (نظرة عامة)
   async _handleArchive(args) {
     if (args.length === 0) {
       return await this.archive.listArchives();
@@ -604,7 +625,6 @@ export default class CommandHandler {
     return await this.archive.showArchive(archiveId);
   }
 
-  // ✅ وضع الاختبار
   async _handleToggleTest(admin, args) {
     if (!args[0]) {
       const current = admin.isTestMode || false;
@@ -642,21 +662,45 @@ export default class CommandHandler {
   }
 
   _help(user) {
+    const botMode = this.userSystem.isBotMode();
+    const isAdmin = this.admin.isAnyAdmin(user);
+
     let msg = '📋 الأوامر\n\n';
     msg += '👤 الحساب\n';
     msg += 'معرفي • نقاطي • ملفي • توب\n\n';
-    msg += '🎮 اللعب\n';
-    msg += 'العاب • العب\n\n';
-    msg += '🎁 الفعاليات\n';
-    msg += 'هدية • كود • احالتي • صديق\n\n';
-    msg += '🛒 السوق\n';
-    msg += 'سوق • اشتر • مشترياتي\n\n';
+
+    if (botMode === 'auto' || isAdmin) {
+      msg += '🎮 اللعب\n';
+      msg += 'العاب • العب\n\n';
+
+      msg += '🎁 الفعاليات\n';
+      msg += 'هدية • كود • احالتي • صديق\n\n';
+
+      msg += '🛒 السوق\n';
+      msg += 'سوق • اشتر • مشترياتي\n\n';
+    } else {
+      msg += '🎮 اللعب\n';
+      msg += 'العاب (للعرض فقط)\n\n';
+
+      msg += '🎁 الفعاليات\n';
+      msg += 'كود • احالتي • صديق\n\n';
+
+      msg += '🛒 السوق\n';
+      msg += 'سوق (للعرض فقط)\n\n';
+    }
+
     msg += '📋 المهام\n';
     msg += 'مهام\n';
-    if (this.admin.isAnyAdmin(user)) {
+
+    if (isAdmin) {
       msg += '\n👑 الإدارة\n';
       msg += 'مدير';
     }
+
+    if (!isAdmin && botMode !== 'auto') {
+      msg += '\n\n💡 للعب أو الشراء:\nراسل الإدارة';
+    }
+
     return msg;
   }
 
@@ -675,7 +719,6 @@ export default class CommandHandler {
 
     let msg = '👑 أوامر الأدمن\n\n';
 
-    // ✅ إضافة نقاط (الكل)
     msg += '💰 النقاط\n';
     msg += 'اضف_نقاط [ID] [الكمية] [السبب]\n';
     msg += 'حالة [ID]\n';
@@ -684,7 +727,6 @@ export default class CommandHandler {
     }
     msg += '\n';
 
-    // ✅ اللاعبون
     msg += '👥 اللاعبون\n';
     msg += 'عرض_اللاعبين [ص]\n';
     msg += 'عرض_المجمدين\n';
@@ -695,28 +737,23 @@ export default class CommandHandler {
     }
     msg += '\n';
 
-    // ✅ المنتجات
     msg += '🛒 المنتجات\n';
     msg += 'عرض_المنتجات\n';
     msg += 'اضف_منتج [الاسم] [السعر] [الكمية] [الوصف]\n';
     msg += 'حذف_منتج [الاسم]\n';
     msg += 'عدل_منتج [الاسم] [الحقل] [القيمة]\n\n';
 
-    // ✅ الأكواد
     msg += '🎫 الأكواد\n';
     msg += 'عرض_الاكواد\n';
     msg += 'اضف_كود [الكود] [الريو] [العدد]\n';
     msg += 'حذف_كود [الكود]\n\n';
 
-    // ✅ الدولاب
     msg += '🎡 دولاب الحظ\n';
     msg += 'اضف_دولاب [الاسم] [السعر] [الجوائز]\n\n';
 
-    // ✅ الإحصائيات
     msg += '📊 إحصائيات\n';
     msg += 'احصائيات\n\n';
 
-    // ✅ الصلاحيات
     if (isMain) {
       msg += '👑 الصلاحيات\n';
       msg += 'منح_ادمن [ID]\n';
@@ -727,7 +764,6 @@ export default class CommandHandler {
       msg += '\n';
     }
 
-    // ✅ السجل والأرشيف
     if (isRoot) {
       msg += '📋 السجل\n';
       msg += 'سجل [حرف] [رقم] [صفحة]\n';
@@ -738,21 +774,17 @@ export default class CommandHandler {
       msg += 'ارشيف [رمز]\n\n';
     }
 
-    // ✅ التواصل
     if (isMain) {
       msg += '📩 التواصل\n';
       msg += 'رسالة [ID] [النص]\n\n';
+
+      msg += '🤖 أوضاع البوت\n';
+      msg += 'وضع_الي — آلي كامل\n';
+      msg += 'وضع_يدوي — عرض فقط\n';
+      msg += 'وضع_ايقاف — تسجيل فقط\n';
+      msg += 'وضعي — الوضع الحالي\n\n';
     }
 
-    // ✅ التحكم
-    if (isMain) {
-      msg += '🤖 التحكم\n';
-      msg += 'ايقاف_البوت\n';
-      msg += 'تشغيل_البوت\n';
-      msg += 'تجربة — لحسابك\n\n';
-    }
-
-    // ✅ الحذف (رئيسي فقط)
     if (isRoot) {
       msg += '🗑️ خطر\n';
       msg += 'حذف_الكل تأكيد\n\n';
@@ -1048,4 +1080,4 @@ export default class CommandHandler {
     });
     return msg;
   }
-                                      }
+            }
